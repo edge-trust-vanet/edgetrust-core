@@ -1,0 +1,32 @@
+# Ignore OMNeT++ and Veins source/installation directories
+simulator/omnetpp/omnetpp-6.4.0/*
+!simulator/omnetpp/omnetpp-6.4.0/samples/
+simulator/omnetpp/omnetpp-6.4.0/samples/*
+!simulator/omnetpp/omnetpp-6.4.0/samples/EdgeTrustSim/
+
+simulator/veins/veins-veins-5.3.1/
+
+# OMNeT++ build and result artifacts
+out/
+*.dll
+*.exe
+*.so
+*.dylib
+Makefile
+Makefile.*
+Makefile.inc
+*.vec
+*.vci
+*.sca
+*.anf
+*.eventlog
+
+# Sumo artifacts
+*.sbx
+*.complex
+
+# General
+.DS_Store
+__pycache__/
+*.pyc
+

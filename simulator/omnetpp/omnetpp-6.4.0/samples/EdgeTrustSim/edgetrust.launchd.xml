@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+  <copy file="network.net.xml" />
+  <copy file="scenario.rou.xml" />
+  <copy file="routes.rou.xml" />
+  <copy file="scenario.sumocfg" type="config" />
+  <basedir path="C:\Users\konch\OneDrive\Desktop\edge-trust-vanet\edgetrust-core\simulator\sumo\edgetrust_scenario" />
+  <seed value="0" />
+</launch>
