@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<routes>
+    <vType id="car" accel="2.6" decel="4.5" sigma="0.5" length="5" minGap="2.5" maxSpeed="13.9" color="0,0,255"/>
+
+    <route id="route0" edges="-E11 E10"/>
+    <route id="route1" edges="-E10 E11"/>
+    <route id="route2" edges="-E12 E13"/>
+    <route id="route3" edges="-E13 E12"/>
+    <route id="route4" edges="-E11 E13"/>
+    <route id="route5" edges="-E13 E10"/>
+    <route id="route6" edges="-E10 E12"/>
+    <route id="route7" edges="-E12 E11"/>
+
+    <flow id="flow0" type="car" begin="0" end="100" probability="0.6" route="route0"/>
+    <flow id="flow1" type="car" begin="0" end="100" probability="0.6" route="route1"/>
+    <flow id="flow2" type="car" begin="0" end="100" probability="0.6" route="route2"/>
+    <flow id="flow3" type="car" begin="0" end="100" probability="0.6" route="route3"/>
+    <flow id="flow4" type="car" begin="0" end="100" probability="0.6" route="route4"/>
+    <flow id="flow5" type="car" begin="0" end="100" probability="0.6" route="route5"/>
+    <flow id="flow6" type="car" begin="0" end="100" probability="0.6" route="route6"/>
+    <flow id="flow7" type="car" begin="0" end="100" probability="0.6" route="route7"/>
+</routes>

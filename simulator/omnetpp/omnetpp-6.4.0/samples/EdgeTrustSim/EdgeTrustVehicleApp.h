@@ -9,7 +9,10 @@ class EdgeTrustVehicleApp : public veins::DemoBaseApplLayer {
   protected:
     virtual void initialize(int stage) override;
     virtual void onBSM(veins::DemoSafetyMessage *bsm) override;
+    virtual void sendDown(cMessage *msg) override;
+
     int vehicleId = 0;
+    bool isMalicious = false;
 };
 
 #endif // __EDGETRUSTVEHICLEAPP_H_
