@@ -4,6 +4,8 @@
 
 #include "veins/modules/application/ieee80211p/DemoBaseApplLayer.h"
 #include "veins/modules/messages/DemoSafetyMessage_m.h"
+#include <map>
+#include <string>
 
 class EdgeTrustVehicleApp : public veins::DemoBaseApplLayer {
   protected:
@@ -11,6 +13,10 @@ class EdgeTrustVehicleApp : public veins::DemoBaseApplLayer {
     virtual void onBSM(veins::DemoSafetyMessage *bsm) override;
     virtual void sendDown(cMessage *msg) override;
 
+    // OBU-Level Lightweight Trust Validation
+    bool lightweightTrustFilter(veins::DemoSafetyMessage *bsm);
+
+    std::map<int, bool> suspiciousNodes;
     int vehicleId = 0;
     bool isMalicious = false;
 };
