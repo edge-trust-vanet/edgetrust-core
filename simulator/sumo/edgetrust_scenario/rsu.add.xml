@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- Roadside Unit (RSU) at the 4-Way Intersection in SUMO -->
+    <poi id="RSU_0" type="RSU_Tower" color="yellow" x="-18.0" y="8.0" width="5.0" height="5.0" layer="150.00"/>
+    <poly id="RSU_0_Zone" type="RSU_Coverage" color="0,150,255,50" fill="1" layer="50.00" shape="-55.0,-30.0 20.0,-30.0 20.0,45.0 -55.0,45.0"/>
+</additional>

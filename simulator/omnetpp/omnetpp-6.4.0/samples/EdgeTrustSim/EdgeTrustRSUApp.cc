@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <sys/stat.h>
 
 namespace veins {
@@ -64,7 +65,7 @@ void EdgeTrustRSUApp::initialize(int stage)
             totalExtractedRecords = 0;
         }
 
-        EV_INFO << "EdgeTrust RSU " << rsuId << " ready to extract live VANET telemetry." << endl;
+        EV_INFO << "EdgeTrust RSU " << rsuId << " [AdaBoost Edge AI] online at intersection." << endl;
     }
 }
 
@@ -218,7 +219,62 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.signalStrength = rssi;
     rec.retransmissionCount = retx;
 
-    // Log to CSV
+    // ── AdaBoost Edge AI Inference ────────────────────────────
+    // Features: [speed, acceleration, position_x, position_y, direction, packet_drop_ratio, latency, signal_strength]
+    double rawFeatures[8] = {
+        reportedSpeed,
+        calcAccel,
+        reportedPos.x,
+        reportedPos.y,
+        headingDeg,
+        rec.packetDropRatio,
+        latency,
+        rssi
+    };
+
+    int mlPred = AdaBoostPredictor::predict(rawFeatures);
+    double mlConf = AdaBoostPredictor::predictProba(rawFeatures); // probability of being malicious
+
+    rec.lastMlPrediction = mlPred;
+    rec.lastMlConfidence = mlConf;
+
+    // ── Hybrid Decision Engine ────────────────────────────────
+    std::string verdict;
+    if (rec.trustScore < 0.40 && mlPred == 1) {
+        verdict = "BLOCK";
+    } else if (rec.trustScore < 0.40 || mlPred == 1) {
+        verdict = "WARN";
+    } else {
+        verdict = "ACCEPT";
+    }
+    rec.lastVerdict = verdict;
+
+    // ── Visual GUI Feedback in OMNeT++ Qtenv ──────────────────
+    if (verdict == "BLOCK") {
+        std::string btext = "AdaBoost: BLOCK! [V" + std::to_string(senderId) + " Mal " + std::to_string((int)(mlConf * 100)) + "%]";
+        findHost()->bubble(btext.c_str());
+        findHost()->getDisplayString().setTagArg("i", 1, "red");
+        EV_WARN << "RSU " << rsuId << " [AdaBoost + Trust Engine]: BLOCKED Node " << senderId
+                << " (Malicious Confidence: " << (mlConf * 100) << "%, Trust: " << rec.trustScore << ")" << endl;
+
+        // Broadcast Safety Advisory warning to surrounding vehicles
+        broadcastSafetyAdvisory(senderId, "BLOCK", mlConf);
+    } else if (verdict == "WARN") {
+        std::string btext = "AdaBoost: WARN [V" + std::to_string(senderId) + " Suspicious]";
+        findHost()->bubble(btext.c_str());
+        findHost()->getDisplayString().setTagArg("i", 1, "yellow");
+    } else {
+        std::string btext = "AdaBoost: ACCEPT [V" + std::to_string(senderId) + " Norm]";
+        findHost()->bubble(btext.c_str());
+        findHost()->getDisplayString().setTagArg("i", 1, "green");
+
+        // Periodically broadcast routine green advisory
+        if (seqNo % 8 == 0) {
+            broadcastSafetyAdvisory(senderId, "CLEAR", (1.0 - mlConf));
+        }
+    }
+
+    // ── Log all 20 features to CSV ────────────────────────────
     logVehicleFeatures(
         senderId, reportedPos.x, reportedPos.y, reportedSpeed, headingDeg, calcAccel,
         rec.packetSent, rec.packetReceived, rec.packetDropRatio, latency, retx, rssi,
@@ -226,17 +282,25 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         rec.falsePacketInjection, rec.blackholeAttackAttempts, rec.sybilAttackAttempts,
         rec.denialOfService, rec.isMalicious ? 1 : 0
     );
+}
 
-    // Visual indicators in OMNeT++ GUI
-    if (rec.trustScore < 0.40) {
-        findHost()->bubble("Decision: BLOCK");
-        EV_WARN << "RSU " << rsuId << ": Node " << senderId
-                << " flagged as MALICIOUS (Trust: " << rec.trustScore << "). Action: BLOCK" << endl;
-    } else if (rec.trustScore < 0.70) {
-        findHost()->bubble("Decision: WARN");
+void EdgeTrustRSUApp::broadcastSafetyAdvisory(int targetVehicleId, const std::string& verdict, double confidence)
+{
+    // Real V2I broadcast communication back into the VANET
+    DemoSafetyMessage* advisory = new DemoSafetyMessage();
+    populateWSM(advisory);
+
+    std::string advName;
+    if (verdict == "BLOCK") {
+        advName = "RSU-ADVISORY: Rogue Node " + std::to_string(targetVehicleId) + " Blocked!";
     } else {
-        findHost()->bubble("Decision: ACCEPT");
+        advName = "RSU-ADVISORY: Intersection Clear (Safe Transit)";
     }
+
+    advisory->setName(advName.c_str());
+    advisory->setSenderPos(curPosition);
+    advisory->setSenderSpeed(Coord(0, 0, 0));
+    sendDown(advisory);
 }
 
 void EdgeTrustRSUApp::logVehicleFeatures(int nodeId, double posX, double posY,

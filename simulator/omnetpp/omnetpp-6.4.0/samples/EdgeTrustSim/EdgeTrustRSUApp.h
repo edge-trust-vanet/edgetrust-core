@@ -3,6 +3,7 @@
 
 #include "veins/modules/application/ieee80211p/DemoBaseApplLayer.h"
 #include "veins/modules/application/edgetrust/EdgeTrustSafetyMessage_m.h"
+#include "veins/modules/application/edgetrust/AdaBoostPredictor.h"
 #include <map>
 #include <fstream>
 #include <mutex>
@@ -33,6 +34,11 @@ struct VehicleTelemetry {
     int denialOfService = 0;
     bool isMalicious = false;
 
+    // AdaBoost ML state
+    int lastMlPrediction = 0;
+    double lastMlConfidence = 0.0;
+    std::string lastVerdict = "ACCEPT";
+
     int bsmCountInLastSecond = 0;
     simtime_t secondWindowStart = SIMTIME_ZERO;
 };
@@ -46,6 +52,8 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void initialize(int stage) override;
     virtual void onBSM(DemoSafetyMessage* bsm) override;
     virtual void finish() override;
+
+    virtual void broadcastSafetyAdvisory(int targetVehicleId, const std::string& verdict, double confidence);
 
     virtual void logVehicleFeatures(int nodeId, double posX, double posY,
                                    double speed, double direction, double acceleration,

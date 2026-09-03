@@ -1,6 +1,7 @@
 // EdgeTrustVehicleApp.cc
 #include "veins/modules/application/edgetrust/EdgeTrustVehicleApp.h"
 #include <cmath>
+#include <sstream>
 
 namespace veins {
 
@@ -15,12 +16,10 @@ void EdgeTrustVehicleApp::initialize(int stage)
 
         maliciousRatio = hasPar("maliciousRatio") ? par("maliciousRatio").doubleValue() : 0.25;
 
-        // Auto-assign malicious status based on ratio (e.g. 25% -> every 4th vehicle)
-        if (maliciousRatio > 0.0) {
-            int step = std::max(1, (int)std::round(1.0 / maliciousRatio));
-            if (step <= 1 || (vehicleId % step == 0)) {
-                isMalicious = true;
-            }
+        // Dynamic random assignment using hash to distribute exactly at maliciousRatio
+        unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
+        if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
+            isMalicious = true;
         }
 
         if (hasPar("isMalicious") && par("isMalicious").boolValue()) {
@@ -28,17 +27,19 @@ void EdgeTrustVehicleApp::initialize(int stage)
         }
 
         if (isMalicious) {
-            // Assign attack type: 1=FDI, 2=Blackhole, 3=Sybil, 4=DoS
+            // Distribute across attack types: 1=FDI, 2=Blackhole, 3=Sybil, 4=DoS
             if (hasPar("attackType") && par("attackType").intValue() > 0) {
                 attackType = par("attackType").intValue();
             } else {
                 attackType = (vehicleId % 4) + 1;
             }
-            EV_INFO << "EdgeTrust: Vehicle " << vehicleId
-                    << " initialized as MALICIOUS (AttackType: " << attackType << ")" << endl;
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
+            EV_INFO << "EdgeTrust Vehicle " << vehicleId
+                    << " initialized as MALICIOUS (Attack: " << attackType << ")" << endl;
         } else {
             attackType = 0;
-            EV_INFO << "EdgeTrust: Vehicle " << vehicleId
+            findHost()->getDisplayString().setTagArg("i", 1, "green");
+            EV_INFO << "EdgeTrust Vehicle " << vehicleId
                     << " initialized as LEGITIMATE." << endl;
         }
 
@@ -58,6 +59,7 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
         if (dropThis) {
             totalPacketsDropped++;
             delete bsm;
+            findHost()->bubble("Blackhole: Dropping BSM!");
             EV_DEBUG << "Vehicle " << vehicleId << " [Blackhole] dropped its own beacon." << endl;
         } else {
             sendDown(bsm);
@@ -119,23 +121,39 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     int effectiveId = vehicleId;
     int retx = (isMalicious && attackType == 2) ? (4 + (rand() % 6)) : (rand() % 3);
 
-    // Apply attack behaviors if malicious
+    // ── Simulate Random Application Messages & Attacks ────────
+    std::string bsmPayload;
     if (isMalicious) {
         if (attackType == 1) {
             // False Data Injection: Falsify position coordinates and speed
             currentPos.x += ((vehicleId % 2 == 0) ? 140.0 : -140.0);
             currentPos.y += ((vehicleId % 3 == 0) ? 90.0 : -90.0);
             currentSpd = Coord(0, 0, 0); // Fake stopped vehicle / false accident
-            findHost()->bubble("FDI: Fake Accident!");
+            bsmPayload = "FDI: Crash on Intersection! Stop!";
+            findHost()->bubble(bsmPayload.c_str());
         } else if (attackType == 3) {
             // Sybil Attack: Use alternate virtual IDs from same physical location
             effectiveId = (vehicleId * 100) + (sequenceNumber % 4);
-            findHost()->bubble("Sybil: Forged ID!");
+            bsmPayload = "Sybil: Ghost Vehicle Broadcasting";
+            findHost()->bubble(bsmPayload.c_str());
         } else if (attackType == 4) {
             // DoS Flooding
-            findHost()->bubble("DoS: Flooding!");
+            bsmPayload = "DoS: High-Rate Flood";
+            findHost()->bubble("DoS Flood!");
         } else if (attackType == 2) {
-            findHost()->bubble("Blackhole: Dropping!");
+            bsmPayload = "Blackhole Dropping";
+        }
+    } else {
+        // Legitimate vehicle: random real-world VANET application messages
+        if (accel < -2.5) {
+            bsmPayload = "V2V: Hard Braking Warning!";
+            findHost()->bubble("V2V: Braking Alert!");
+        } else if (spdMag < 2.0) {
+            bsmPayload = "V2V: Queued at Traffic Light";
+            if (sequenceNumber % 4 == 0) findHost()->bubble("V2V: Intersection Wait");
+        } else {
+            bsmPayload = "V2V: Normal Flow (Speed " + std::to_string((int)spdMag) + " m/s)";
+            if (sequenceNumber % 5 == 0) findHost()->bubble("V2V: Clear Transit");
         }
     }
 
@@ -178,8 +196,21 @@ bool EdgeTrustVehicleApp::lightweightTrustFilter(DemoSafetyMessage* bsm)
 
 void EdgeTrustVehicleApp::onBSM(DemoSafetyMessage* bsm)
 {
+    std::string msgName = bsm->getName();
+
+    // Check if message is an RSU Safety Advisory
+    if (msgName.rfind("RSU-ADVISORY:", 0) == 0) {
+        if (msgName.find("Blocked") != std::string::npos) {
+            findHost()->bubble("OBU: Received RSU Advisory - Hazard Blocked!");
+        } else {
+            if (rand() % 3 == 0) findHost()->bubble("OBU: RSU Signal Verified");
+        }
+        return;
+    }
+
+    // Peer vehicle message: run lightweight trust filter
     if (!lightweightTrustFilter(bsm)) {
-        findHost()->bubble("Filter: Dropped Spoofed BSM!");
+        findHost()->bubble("OBU: Filter Dropped Malicious BSM!");
         return;
     }
 }

@@ -1,0 +1,4 @@
+<obstacles>
+    <type id="building" db-per-cut="9" db-per-meter="0.4" />
+    <poly id="dummy" type="building" color="#F00" shape="-10,-10 -10,-11 -11,-11 -11,-10" />
+</obstacles>
