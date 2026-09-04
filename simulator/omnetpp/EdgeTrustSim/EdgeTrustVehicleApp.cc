@@ -148,9 +148,11 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
             currentPos.x += ((vehicleId % 2 == 0) ? 28.0 : -28.0);
             currentPos.y += ((vehicleId % 3 == 0) ? 22.0 : -22.0);
             currentSpd = Coord(0, 0, 0); // Fake stopped vehicle / false accident
-            bsmPayload = "ATTACK: FDI Fake Crash (+140m)";
+            bsmPayload = "ATTACK: FDI Fake Crash (+28m)";
             findHost()->bubble(bsmPayload.c_str());
-            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: FDI Fake Crash (+140m)");
+            char tagStr[96];
+            snprintf(tagStr, sizeof(tagStr), "V%d: FDI ATTACK (Spoofed +28m)", vehicleId);
+            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
             findHost()->getDisplayString().setTagArg("t", 1, "t");
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
@@ -172,7 +174,7 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
         } else if (attackType == 2) {
-            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: Blackhole Node");
+            findHost()->getDisplayString().setTagArg("t", 0, "V3: BLACKHOLE ATTACK (Dropping)");
             findHost()->getDisplayString().setTagArg("t", 1, "t");
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
@@ -180,7 +182,7 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     } else {
         // Legitimate vehicle or pre-attack stage: persistent status badge + bubble
         char tagStr[96];
-        snprintf(tagStr, sizeof(tagStr), "V%d: Telemetry (%.1f m/s)", vehicleId, spdMag);
+        snprintf(tagStr, sizeof(tagStr), "V%d: Legitimate (%.1f m/s)", vehicleId, spdMag);
         findHost()->getDisplayString().setTagArg("t", 0, tagStr);
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");

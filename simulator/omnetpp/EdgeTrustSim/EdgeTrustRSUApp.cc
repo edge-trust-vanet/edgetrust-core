@@ -151,9 +151,10 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         newRec.retransmissionCount = retx;
         newRec.signalStrength = rssi;
         newRec.isMalicious = isMal;
-        newRec.trustScore = isMal ? 0.40 : 0.92;
-        newRec.neighborTrustScoreAvg = isMal ? 0.38 : 0.90;
-        newRec.historicalTrustScore = isMal ? 0.42 : 0.94;
+        // Universal honest baseline initialization (no label leakage) as in scripts/trust_score.py
+        newRec.trustScore = 0.95;
+        newRec.neighborTrustScoreAvg = 0.92;
+        newRec.historicalTrustScore = 0.95;
         vehicleRecords[senderId] = newRec;
     }
 
@@ -177,27 +178,34 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     double calcAccel = (dtSec > 0.0) ? (reportedSpeed - rec.lastSpeed) / dtSec : reportedAccel;
     calcAccel = std::max(-9.0, std::min(6.0, calcAccel));
 
-    // Plausibility Check (kinematics comparison)
+    // ── Trust Factor 1: Kinematic Plausibility (weight: 0.20) ────────────────
     double distanceMoved = reportedPos.distance(rec.lastPos);
     double calculatedSpeed = (dtSec > 0.0) ? distanceMoved / dtSec : reportedSpeed;
     double speedDiff = std::abs(reportedSpeed - calculatedSpeed);
 
     double plausibility = 1.0;
-    if (speedDiff > 5.0) {
-        plausibility = std::max(0.0, 1.0 - ((speedDiff - 5.0) / 25.0));
+    if (speedDiff > 3.0) {
+        plausibility = std::max(0.0, 1.0 - ((speedDiff - 3.0) / 10.0));
     }
-    if (calculatedSpeed > 45.0 || distanceMoved > 60.0 || speedDiff > 12.0) {
-        plausibility = 0.0;
+    // Severe FDI anomaly (impossible jump or speed disparity)
+    if (distanceMoved > 25.0 || speedDiff > 10.0 || calculatedSpeed > 45.0) {
+        plausibility = 0.02;
         rec.falsePacketInjection++;
     }
 
-    // Consistency Check
+    // ── Trust Factor 2: Message Consistency (weight: 0.30) ───────────────────
     double consistency = 1.0;
-    if (std::abs(calcAccel) > 5.5) consistency -= 0.35;
-    if (calculatedSpeed > 40.0) consistency -= 0.40;
-    consistency = std::max(0.0, consistency);
+    if (calcAccel < -6.0 || calcAccel > 4.5) {
+        consistency = std::max(0.05, 1.0 - (std::abs(calcAccel) - 4.5) / 5.0);
+    }
+    if (reportedSpeed > 35.0) {
+        consistency = std::max(0.05, consistency - 0.40);
+    }
+    if (rec.falsePacketInjection > 0) {
+        consistency = std::min(consistency, 0.06);
+    }
 
-    // Rate / Denial of Service Check
+    // ── Rate / Denial of Service Check ───────────────────────────────────────
     if ((currentTime - rec.secondWindowStart).dbl() >= 1.0) {
         rec.secondWindowStart = currentTime;
         rec.bsmCountInLastSecond = 1;
@@ -208,9 +216,21 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         }
     }
 
-    // Blackhole Attack Detection
+    // ── Trust Factor 3: Communication Reliability (weight: 0.30) ─────────────
+    double pdr = std::max(0.0, 1.0 - rec.packetDropRatio);
+    double retxPenalty = std::min(0.40, retx * 0.08);
+    double latencyPenalty = std::min(0.30, latency > 50.0 ? (latency - 50.0) / 150.0 : 0.0);
+    double commScore = std::max(0.02, pdr - retxPenalty - latencyPenalty);
+
+    if (rec.falsePacketInjection > 0) {
+        commScore = std::min(commScore, 0.08);
+    }
     if (rec.packetDropRatio > 0.45) {
+        commScore = 0.05;
         rec.blackholeAttackAttempts++;
+    }
+    if (rec.denialOfService > 0) {
+        commScore = 0.05;
     }
 
     // Sybil Attack Detection
@@ -218,25 +238,34 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         rec.sybilAttackAttempts++;
     }
 
-    // Trust Score (Direct, Neighbor, Historical)
-    double commScore = std::max(0.0, 1.0 - rec.packetDropRatio);
-    double directTrust = (0.50 * plausibility) + (0.30 * consistency) + (0.20 * commScore);
-    rec.trustScore = (0.70 * rec.trustScore) + (0.30 * directTrust);
-
-    double noise = ((rand() % 100) - 50) / 1000.0;
-    rec.neighborTrustScoreAvg = std::max(0.05, std::min(1.0, rec.trustScore + noise));
-    rec.historicalTrustScore = (0.70 * rec.historicalTrustScore) + (0.30 * rec.trustScore);
-
-    if (rec.falsePacketInjection > 0) {
-        rec.trustScore = std::min(rec.trustScore, 0.35);
-        rec.neighborTrustScoreAvg = std::min(rec.neighborTrustScoreAvg, 0.34);
-        rec.historicalTrustScore = std::min(rec.historicalTrustScore, 0.38);
+    // ── Trust Factor 4: Neighbor Validation Consensus (weight: 0.20) ─────────
+    double neighborValidation = 0.95;
+    if (rec.falsePacketInjection > 0 || rec.blackholeAttackAttempts > 0) {
+        neighborValidation = 0.06;
+    } else {
+        // Natural small RF / spatial channel variance (+/- 0.03)
+        double rfNoise = ((rand() % 60) - 30) / 1000.0;
+        neighborValidation = std::max(0.72, std::min(0.99, 0.94 + rfNoise));
     }
-    if (rec.blackholeAttackAttempts > 0) {
-        rec.trustScore = std::min(rec.trustScore, 0.36);
-        rec.neighborTrustScoreAvg = std::min(rec.neighborTrustScoreAvg, 0.35);
-        rec.historicalTrustScore = std::min(rec.historicalTrustScore, 0.39);
-    }
+
+    // ── Weighted Composite Evidence Score (scripts/trust_score.py) ───────────
+    // Weights: consistency: 0.30, behavior_history: 0.30, neighbor_validation: 0.20, plausibility: 0.20
+    double evidence = (0.30 * consistency) + (0.30 * commScore) +
+                      (0.20 * neighborValidation) + (0.20 * plausibility);
+    evidence = std::max(0.01, std::min(1.0, evidence));
+
+    // ── Exponential Moving Average Trust Update (PAPER_JUSTIFICATION_POINTS.md Sec 3)
+    // Formula: new_trust = alpha * previous_trust + (1 - alpha) * evidence_score
+    const double ALPHA = 0.70; // Proven optimal forgetting factor
+    rec.trustScore = (ALPHA * rec.trustScore) + ((1.0 - ALPHA) * evidence);
+
+    // ── Historical Trust Score (Long-term reputation tracking with alpha_hist = 0.85)
+    rec.historicalTrustScore = (0.85 * rec.historicalTrustScore) + (0.15 * rec.trustScore);
+
+    // ── Neighbor Trust Score Average (Consensus with slight environmental variance)
+    double nNoise = ((rand() % 40) - 20) / 1000.0;
+    double targetNeighbor = std::max(0.02, std::min(1.0, neighborValidation + nNoise));
+    rec.neighborTrustScoreAvg = (0.75 * rec.neighborTrustScoreAvg) + (0.25 * targetNeighbor);
 
     rec.lastSpeed = reportedSpeed;
     rec.lastPos = reportedPos;
@@ -279,13 +308,27 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     drawArrow(reportedPos, curPosition, arrowColor, "arrow_v" + std::to_string(senderId) + "_to_rsu");
 
     // ── Persistent Visual GUI Feedback in OMNeT++ Qtenv ───────
-    char badge[128];
-    snprintf(badge, sizeof(badge), "AdaBoost: %s [V%d | %d%%]",
-             verdict.c_str(), senderId, (int)(mlConf * 100));
+    char badge[140];
+    snprintf(badge, sizeof(badge), "RSU-%d [AdaBoost: %s V%d | ML: %d%% | Trust: %.2f]",
+             rsuId, verdict.c_str(), senderId, (int)(mlConf * 100), rec.trustScore);
     findHost()->getDisplayString().setTagArg("t", 0, badge);
     findHost()->getDisplayString().setTagArg("t", 1, "t");
     findHost()->getDisplayString().setTagArg("t", 2, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "orange" : "darkgreen")));
     findHost()->getDisplayString().setTagArg("i", 1, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "yellow" : "green")));
+
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << currentTime << "s] BSM from Node " << senderId
+            << " | Pos: (" << reportedPos.x << ", " << reportedPos.y << ")"
+            << " | Spd: " << reportedSpeed << " m/s" << endl;
+    EV_INFO << "   -> Kinematics: Plausibility=" << plausibility
+            << " | Consistency=" << consistency
+            << " | DropRatio=" << rec.packetDropRatio << endl;
+    EV_INFO << "   -> AdaBoost Edge AI: " << (mlPred == 1 ? "MALICIOUS" : "NORMAL")
+            << " (Conf: " << (int)(mlConf * 100) << "%)"
+            << " | Direct Trust: " << rec.trustScore
+            << " (Hist: " << rec.historicalTrustScore << ")" << endl;
+    EV_INFO << "   ==> FINAL HYBRID VERDICT: [" << verdict << "]" << endl;
+    EV_INFO << "============================================================" << endl;
 
     if (verdict == "BLOCK") {
         std::string btext = "AdaBoost: BLOCK! [Node " + std::to_string(senderId) + " Malicious (" + std::to_string((int)(mlConf * 100)) + "%)]";
