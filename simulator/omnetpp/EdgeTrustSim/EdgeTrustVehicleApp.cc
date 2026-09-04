@@ -15,33 +15,45 @@ void EdgeTrustVehicleApp::initialize(int stage)
         vehicleId = findHost()->getIndex() + 1;
 
         maliciousRatio = hasPar("maliciousRatio") ? par("maliciousRatio").doubleValue() : 0.25;
+        maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
 
-        // Dynamic random assignment using hash to distribute exactly at maliciousRatio
-        unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
-        if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
+        // Guaranteed early attack demonstration:
+        // Node 1: Legitimate baseline
+        // Node 2: Attacking after 2 normal messages (FDI False Data Injection)
+        // Node 3: Attacking after 2 normal messages (Blackhole Packet Dropping)
+        if (vehicleId == 1) {
+            isMalicious = false;
+            attackType = 0;
+            attackStartMessage = 9999;
+        } else if (vehicleId == 2) {
             isMalicious = true;
+            attackType = 1; // FDI (False Data Injection)
+            attackStartMessage = 3; // Trigger attack right after 2 normal message exchanges!
+        } else if (vehicleId == 3) {
+            isMalicious = true;
+            attackType = 2; // Blackhole Attack
+            attackStartMessage = 3;
+        } else {
+            unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
+            if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
+                isMalicious = true;
+                attackType = (vehicleId % 4) + 1;
+                attackStartMessage = 3;
+            } else {
+                isMalicious = false;
+                attackType = 0;
+                attackStartMessage = 9999;
+            }
         }
 
         if (hasPar("isMalicious") && par("isMalicious").boolValue()) {
             isMalicious = true;
         }
 
-        if (isMalicious) {
-            // Distribute across attack types: 1=FDI, 2=Blackhole, 3=Sybil, 4=DoS
-            if (hasPar("attackType") && par("attackType").intValue() > 0) {
-                attackType = par("attackType").intValue();
-            } else {
-                attackType = (vehicleId % 4) + 1;
-            }
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
-            EV_INFO << "EdgeTrust Vehicle " << vehicleId
-                    << " initialized as MALICIOUS (Attack: " << attackType << ")" << endl;
-        } else {
-            attackType = 0;
-            findHost()->getDisplayString().setTagArg("i", 1, "green");
-            EV_INFO << "EdgeTrust Vehicle " << vehicleId
-                    << " initialized as LEGITIMATE." << endl;
-        }
+        findHost()->getDisplayString().setTagArg("t", 0, "Initializing OBU...");
+        findHost()->getDisplayString().setTagArg("t", 1, "t");
+        findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
+        findHost()->getDisplayString().setTagArg("i", 1, "green");
 
         lastTime = simTime();
     }
@@ -54,12 +66,18 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
         populateWSM(bsm);
         populateEdgeTrustMessage(bsm);
 
+        bool attackActive = (isMalicious && sequenceNumber >= attackStartMessage);
+
         // Blackhole attack: intentionally drop 70% of outgoing communications
-        bool dropThis = (isMalicious && attackType == 2 && ((rand() % 10) < 7));
+        bool dropThis = (attackActive && attackType == 2 && ((rand() % 10) < 7));
         if (dropThis) {
             totalPacketsDropped++;
             delete bsm;
             findHost()->bubble("Blackhole: Dropping BSM!");
+            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: Blackhole Dropping!");
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
             EV_DEBUG << "Vehicle " << vehicleId << " [Blackhole] dropped its own beacon." << endl;
         } else {
             sendDown(bsm);
@@ -67,7 +85,7 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
         }
 
         // DoS flooding: schedule much faster beacon rate (10-20 Hz instead of 1 Hz)
-        simtime_t nextInterval = (isMalicious && attackType == 4) ? simtime_t(0.08) : beaconInterval;
+        simtime_t nextInterval = (attackActive && attackType == 4) ? simtime_t(0.08) : beaconInterval;
         scheduleAt(simTime() + nextInterval, sendBeaconEvt);
     } else {
         DemoBaseApplLayer::handleSelfMsg(msg);
@@ -120,40 +138,60 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
 
     int effectiveId = vehicleId;
     int retx = (isMalicious && attackType == 2) ? (4 + (rand() % 6)) : (rand() % 3);
+    bool attackActive = (isMalicious && sequenceNumber >= attackStartMessage);
 
-    // ── Simulate Random Application Messages & Attacks ────────
+    // ── Simulate Random Application Messages & Early Attacks ──
     std::string bsmPayload;
-    if (isMalicious) {
+    if (attackActive) {
         if (attackType == 1) {
-            // False Data Injection: Falsify position coordinates and speed
-            currentPos.x += ((vehicleId % 2 == 0) ? 140.0 : -140.0);
-            currentPos.y += ((vehicleId % 3 == 0) ? 90.0 : -90.0);
+            // False Data Injection: Falsify position coordinates by 25m (different lane/branch) and speed to 0
+            currentPos.x += ((vehicleId % 2 == 0) ? 28.0 : -28.0);
+            currentPos.y += ((vehicleId % 3 == 0) ? 22.0 : -22.0);
             currentSpd = Coord(0, 0, 0); // Fake stopped vehicle / false accident
-            bsmPayload = "FDI: Crash on Intersection! Stop!";
+            bsmPayload = "ATTACK: FDI Fake Crash (+140m)";
             findHost()->bubble(bsmPayload.c_str());
+            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: FDI Fake Crash (+140m)");
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
         } else if (attackType == 3) {
             // Sybil Attack: Use alternate virtual IDs from same physical location
             effectiveId = (vehicleId * 100) + (sequenceNumber % 4);
-            bsmPayload = "Sybil: Ghost Vehicle Broadcasting";
+            bsmPayload = "ATTACK: Sybil Ghost ID " + std::to_string(effectiveId);
             findHost()->bubble(bsmPayload.c_str());
+            findHost()->getDisplayString().setTagArg("t", 0, bsmPayload.c_str());
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
         } else if (attackType == 4) {
             // DoS Flooding
-            bsmPayload = "DoS: High-Rate Flood";
-            findHost()->bubble("DoS Flood!");
+            bsmPayload = "ATTACK: DoS Rapid Flood";
+            findHost()->bubble(bsmPayload.c_str());
+            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: DoS Flooding");
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
         } else if (attackType == 2) {
-            bsmPayload = "Blackhole Dropping";
+            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: Blackhole Node");
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
         }
     } else {
-        // Legitimate vehicle: random real-world VANET application messages
+        // Legitimate vehicle or pre-attack stage: persistent status badge + bubble
+        char tagStr[96];
+        snprintf(tagStr, sizeof(tagStr), "V%d: Telemetry (%.1f m/s)", vehicleId, spdMag);
+        findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+        findHost()->getDisplayString().setTagArg("t", 1, "t");
+        findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
+        findHost()->getDisplayString().setTagArg("i", 1, "green");
+
         if (accel < -2.5) {
-            bsmPayload = "V2V: Hard Braking Warning!";
-            findHost()->bubble("V2V: Braking Alert!");
+            findHost()->bubble("V2V: Hard Braking Warning!");
         } else if (spdMag < 2.0) {
-            bsmPayload = "V2V: Queued at Traffic Light";
-            if (sequenceNumber % 4 == 0) findHost()->bubble("V2V: Intersection Wait");
+            if (sequenceNumber % 3 == 0) findHost()->bubble("V2V: Queued at Intersection");
         } else {
-            bsmPayload = "V2V: Normal Flow (Speed " + std::to_string((int)spdMag) + " m/s)";
-            if (sequenceNumber % 5 == 0) findHost()->bubble("V2V: Clear Transit");
+            if (sequenceNumber % 4 == 0) findHost()->bubble("V2V: Normal Transit");
         }
     }
 
@@ -166,8 +204,8 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     bsm->setAcceleration(accel);
     bsm->setSequenceNumber(sequenceNumber);
     bsm->setRetransmissionCount(retx);
-    bsm->setIsMalicious(isMalicious);
-    bsm->setAttackType(attackType);
+    bsm->setIsMalicious(attackActive);
+    bsm->setAttackType(attackActive ? attackType : 0);
 }
 
 bool EdgeTrustVehicleApp::lightweightTrustFilter(DemoSafetyMessage* bsm)
@@ -196,12 +234,21 @@ bool EdgeTrustVehicleApp::lightweightTrustFilter(DemoSafetyMessage* bsm)
 
 void EdgeTrustVehicleApp::onBSM(DemoSafetyMessage* bsm)
 {
+    // Physical coverage check: drop packets beyond maxCommunicationRange
+    double dist = curPosition.distance(bsm->getSenderPos());
+    if (dist > maxCommunicationRange) {
+        return; // Beyond 802.11p radio reception boundary
+    }
+
     std::string msgName = bsm->getName();
 
     // Check if message is an RSU Safety Advisory
     if (msgName.rfind("RSU-ADVISORY:", 0) == 0) {
         if (msgName.find("Blocked") != std::string::npos) {
-            findHost()->bubble("OBU: Received RSU Advisory - Hazard Blocked!");
+            findHost()->bubble("OBU: Warning - Rogue Node Blocked!");
+            findHost()->getDisplayString().setTagArg("t", 0, "OBU: Alert Acknowledged");
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "blue");
         } else {
             if (rand() % 3 == 0) findHost()->bubble("OBU: RSU Signal Verified");
         }
@@ -213,6 +260,27 @@ void EdgeTrustVehicleApp::onBSM(DemoSafetyMessage* bsm)
         findHost()->bubble("OBU: Filter Dropped Malicious BSM!");
         return;
     }
+}
+
+void EdgeTrustVehicleApp::drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cCanvas* canvas = parent->getCanvas();
+    if (!canvas) return;
+
+    cLineFigure* arrow = dynamic_cast<cLineFigure*>(canvas->getFigure(arrowId.c_str()));
+    if (!arrow) {
+        arrow = new cLineFigure(arrowId.c_str());
+        arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
+        arrow->setZoomLineWidth(true);
+        canvas->addFigure(arrow);
+    }
+    arrow->setStart(cFigure::Point(from.x, from.y));
+    arrow->setEnd(cFigure::Point(to.x, to.y));
+    arrow->setLineWidth(2.5);
+    arrow->setLineColor(cFigure::Color(color.c_str()));
+    arrow->setVisible(true);
 }
 
 void EdgeTrustVehicleApp::finish()

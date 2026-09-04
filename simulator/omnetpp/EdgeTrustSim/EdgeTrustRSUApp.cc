@@ -34,6 +34,12 @@ void EdgeTrustRSUApp::initialize(int stage)
         rsuId = hasPar("rsuId") ? par("rsuId").intValue() : findHost()->getIndex();
         csvOutputPath = hasPar("csvOutputPath") ? par("csvOutputPath").stringValue() : "results/live_extracted_features.csv";
         mlDataCsvPath = hasPar("mlDataCsvPath") ? par("mlDataCsvPath").stringValue() : "../../../../../edgetrust-ml/data/live_extracted_features.csv";
+        maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
+
+        findHost()->getDisplayString().setTagArg("t", 0, "RSU: AdaBoost Active");
+        findHost()->getDisplayString().setTagArg("t", 1, "t");
+        findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
+        findHost()->getDisplayString().setTagArg("i", 1, "green");
 
         std::lock_guard<std::mutex> lock(csvFileMutex);
         if (!headerWritten) {
@@ -102,6 +108,15 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     }
 
     Coord reportedPos = bsm->getSenderPos();
+
+    // Physical coverage check: drop packets beyond RSU 802.11p radio boundary
+    double dist = curPosition.distance(reportedPos);
+    if (dist > maxCommunicationRange) {
+        EV_DEBUG << "RSU " << rsuId << ": Node " << senderId << " outside coverage ("
+                 << dist << "m > " << maxCommunicationRange << "m). Discarding." << endl;
+        return;
+    }
+
     Coord reportedSpeedCoord = bsm->getSenderSpeed();
     double reportedSpeed = reportedSpeedCoord.length();
     simtime_t currentTime = simTime();
@@ -113,7 +128,6 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     }
 
     // Physical distance and signal strength (RSSI in dBm)
-    double dist = curPosition.distance(reportedPos);
     double rssi = -44.0 - (10.0 * 2.8 * std::log10(std::max(1.0, dist / 3.0))) - ((rand() % 350) / 100.0);
     rssi = std::max(-98.0, std::min(-32.0, rssi));
 
@@ -144,6 +158,7 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     }
 
     VehicleTelemetry& rec = vehicleRecords[senderId];
+    rec.isMalicious = isMal;
 
     simtime_t dt = currentTime - rec.lastTime;
     double dtSec = dt.dbl();
@@ -212,6 +227,17 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.neighborTrustScoreAvg = std::max(0.05, std::min(1.0, rec.trustScore + noise));
     rec.historicalTrustScore = (0.70 * rec.historicalTrustScore) + (0.30 * rec.trustScore);
 
+    if (rec.falsePacketInjection > 0) {
+        rec.trustScore = std::min(rec.trustScore, 0.35);
+        rec.neighborTrustScoreAvg = std::min(rec.neighborTrustScoreAvg, 0.34);
+        rec.historicalTrustScore = std::min(rec.historicalTrustScore, 0.38);
+    }
+    if (rec.blackholeAttackAttempts > 0) {
+        rec.trustScore = std::min(rec.trustScore, 0.36);
+        rec.neighborTrustScoreAvg = std::min(rec.neighborTrustScoreAvg, 0.35);
+        rec.historicalTrustScore = std::min(rec.historicalTrustScore, 0.39);
+    }
+
     rec.lastSpeed = reportedSpeed;
     rec.lastPos = reportedPos;
     rec.lastTime = currentTime;
@@ -220,7 +246,6 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.retransmissionCount = retx;
 
     // ── AdaBoost Edge AI Inference ────────────────────────────
-    // Features: [speed, acceleration, position_x, position_y, direction, packet_drop_ratio, latency, signal_strength]
     double rawFeatures[8] = {
         reportedSpeed,
         calcAccel,
@@ -233,7 +258,7 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     };
 
     int mlPred = AdaBoostPredictor::predict(rawFeatures);
-    double mlConf = AdaBoostPredictor::predictProba(rawFeatures); // probability of being malicious
+    double mlConf = AdaBoostPredictor::predictProba(rawFeatures); // probability of malicious
 
     rec.lastMlPrediction = mlPred;
     rec.lastMlConfidence = mlConf;
@@ -249,27 +274,36 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     }
     rec.lastVerdict = verdict;
 
-    // ── Visual GUI Feedback in OMNeT++ Qtenv ──────────────────
+    // ── Draw Visible Direction Arrow (Sender -> RSU) ──────────
+    std::string arrowColor = (verdict == "BLOCK") ? "red" : (verdict == "WARN" ? "yellow" : "green");
+    drawArrow(reportedPos, curPosition, arrowColor, "arrow_v" + std::to_string(senderId) + "_to_rsu");
+
+    // ── Persistent Visual GUI Feedback in OMNeT++ Qtenv ───────
+    char badge[128];
+    snprintf(badge, sizeof(badge), "AdaBoost: %s [V%d | %d%%]",
+             verdict.c_str(), senderId, (int)(mlConf * 100));
+    findHost()->getDisplayString().setTagArg("t", 0, badge);
+    findHost()->getDisplayString().setTagArg("t", 1, "t");
+    findHost()->getDisplayString().setTagArg("t", 2, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "orange" : "darkgreen")));
+    findHost()->getDisplayString().setTagArg("i", 1, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "yellow" : "green")));
+
     if (verdict == "BLOCK") {
-        std::string btext = "AdaBoost: BLOCK! [V" + std::to_string(senderId) + " Mal " + std::to_string((int)(mlConf * 100)) + "%]";
+        std::string btext = "AdaBoost: BLOCK! [Node " + std::to_string(senderId) + " Malicious (" + std::to_string((int)(mlConf * 100)) + "%)]";
         findHost()->bubble(btext.c_str());
-        findHost()->getDisplayString().setTagArg("i", 1, "red");
         EV_WARN << "RSU " << rsuId << " [AdaBoost + Trust Engine]: BLOCKED Node " << senderId
                 << " (Malicious Confidence: " << (mlConf * 100) << "%, Trust: " << rec.trustScore << ")" << endl;
 
         // Broadcast Safety Advisory warning to surrounding vehicles
         broadcastSafetyAdvisory(senderId, "BLOCK", mlConf);
     } else if (verdict == "WARN") {
-        std::string btext = "AdaBoost: WARN [V" + std::to_string(senderId) + " Suspicious]";
+        std::string btext = "AdaBoost: WARN [Node " + std::to_string(senderId) + " Suspicious]";
         findHost()->bubble(btext.c_str());
-        findHost()->getDisplayString().setTagArg("i", 1, "yellow");
     } else {
-        std::string btext = "AdaBoost: ACCEPT [V" + std::to_string(senderId) + " Norm]";
+        std::string btext = "AdaBoost: ACCEPT [Node " + std::to_string(senderId) + " Verified]";
         findHost()->bubble(btext.c_str());
-        findHost()->getDisplayString().setTagArg("i", 1, "green");
 
         // Periodically broadcast routine green advisory
-        if (seqNo % 8 == 0) {
+        if (seqNo % 6 == 0) {
             broadcastSafetyAdvisory(senderId, "CLEAR", (1.0 - mlConf));
         }
     }
@@ -293,6 +327,11 @@ void EdgeTrustRSUApp::broadcastSafetyAdvisory(int targetVehicleId, const std::st
     std::string advName;
     if (verdict == "BLOCK") {
         advName = "RSU-ADVISORY: Rogue Node " + std::to_string(targetVehicleId) + " Blocked!";
+        // Draw radiating blue advisory arrows
+        drawArrow(curPosition, Coord(curPosition.x + 35, curPosition.y), "blue", "rsu_adv_e");
+        drawArrow(curPosition, Coord(curPosition.x - 35, curPosition.y), "blue", "rsu_adv_w");
+        drawArrow(curPosition, Coord(curPosition.x, curPosition.y + 35), "blue", "rsu_adv_n");
+        drawArrow(curPosition, Coord(curPosition.x, curPosition.y - 35), "blue", "rsu_adv_s");
     } else {
         advName = "RSU-ADVISORY: Intersection Clear (Safe Transit)";
     }
@@ -301,6 +340,27 @@ void EdgeTrustRSUApp::broadcastSafetyAdvisory(int targetVehicleId, const std::st
     advisory->setSenderPos(curPosition);
     advisory->setSenderSpeed(Coord(0, 0, 0));
     sendDown(advisory);
+}
+
+void EdgeTrustRSUApp::drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cCanvas* canvas = parent->getCanvas();
+    if (!canvas) return;
+
+    cLineFigure* arrow = dynamic_cast<cLineFigure*>(canvas->getFigure(arrowId.c_str()));
+    if (!arrow) {
+        arrow = new cLineFigure(arrowId.c_str());
+        arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
+        arrow->setZoomLineWidth(true);
+        canvas->addFigure(arrow);
+    }
+    arrow->setStart(cFigure::Point(from.x, from.y));
+    arrow->setEnd(cFigure::Point(to.x, to.y));
+    arrow->setLineWidth(color == "red" ? 3.5 : 2.2);
+    arrow->setLineColor(cFigure::Color(color.c_str()));
+    arrow->setVisible(true);
 }
 
 void EdgeTrustRSUApp::logVehicleFeatures(int nodeId, double posX, double posY,

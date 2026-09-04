@@ -4,6 +4,7 @@
 #include "veins/modules/application/ieee80211p/DemoBaseApplLayer.h"
 #include "veins/modules/application/edgetrust/EdgeTrustSafetyMessage_m.h"
 #include "veins/modules/application/edgetrust/AdaBoostPredictor.h"
+#include <omnetpp/ccanvas.h>
 #include <map>
 #include <fstream>
 #include <mutex>
@@ -54,6 +55,7 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void finish() override;
 
     virtual void broadcastSafetyAdvisory(int targetVehicleId, const std::string& verdict, double confidence);
+    virtual void drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId);
 
     virtual void logVehicleFeatures(int nodeId, double posX, double posY,
                                    double speed, double direction, double acceleration,
@@ -66,6 +68,7 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     int rsuId = 0;
     std::string csvOutputPath;
     std::string mlDataCsvPath;
+    double maxCommunicationRange = 85.0; // Realistic 802.11p RSU range (meters)
 
     std::map<int, VehicleTelemetry> vehicleRecords;
 
