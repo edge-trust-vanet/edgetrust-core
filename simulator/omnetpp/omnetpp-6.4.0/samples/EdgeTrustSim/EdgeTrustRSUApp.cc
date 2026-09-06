@@ -326,24 +326,35 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.lastVerdict = verdict;
 
     // ── Direction Arrows on Line of Transmission ──────────────
-    // Old arrows from previous node/RSU transmissions disappear,
-    // and only arrows for the current transmission are displayed.
+    // Resolve exact live visual positions of transmitting vehicle and RSU on canvas
+    cModule* parent = findHost()->getParentModule();
+    cModule* senderMod = nullptr;
+    if (bsm) {
+        cModule* m = bsm->getSenderModule();
+        while (m && m->getParentModule() && m->getParentModule() != parent) {
+            m = m->getParentModule();
+        }
+        if (m && m->getParentModule() == parent) {
+            senderMod = m;
+        }
+    }
+    if (!senderMod && parent) {
+        int nodeIdx = (senderId > 50) ? (senderId / 100) - 1 : senderId - 1;
+        if (nodeIdx >= 0) {
+            senderMod = parent->getSubmodule("node", nodeIdx);
+        }
+    }
+
+    Coord senderVisualPos = getModuleVisualPos(senderMod, reportedPos);
+    Coord rsuVisualPos = getModuleVisualPos(findHost(), curPosition);
+
+    // Old arrows from previous transmissions are removed
     clearTransmissionArrows();
 
     std::string arrowColor = (verdict == "BLOCK") ? "red" : (verdict == "WARN" ? "orange" : "green");
 
-    // 1. Arrow along transmission line: Current Transmitting Vehicle -> Receiving RSU
-    addTransmissionArrow(reportedPos, curPosition, arrowColor);
-
-    // 2. Arrows along transmission line: Current Transmitting Vehicle -> Receiving Peer Vehicles within 85m range
-    for (const auto& kv : vehicleRecords) {
-        if (kv.first != senderId) {
-            double d = reportedPos.distance(kv.second.lastPos);
-            if (d <= maxCommunicationRange && (currentTime - kv.second.lastTime).dbl() < 2.5) {
-                addTransmissionArrow(reportedPos, kv.second.lastPos, arrowColor);
-            }
-        }
-    }
+    // Clean, direct arrow on line of transmission: FROM transmitting vehicle TO receiving RSU
+    addTransmissionArrow(senderVisualPos, rsuVisualPos, arrowColor);
 
     // ── Visual GUI Feedback in OMNeT++ Qtenv ──────────────────
     char badge[160];
@@ -408,28 +419,31 @@ void EdgeTrustRSUApp::broadcastSafetyAdvisory(int targetVehicleId, const std::st
     populateWSM(advisory);
 
     std::string advName;
-    std::string advColor;
     if (verdict == "BLOCK") {
         advName = "RSU-ADVISORY: Rogue Node " + std::to_string(targetVehicleId) + " Blocked!";
-        advColor = "red";
     } else {
         advName = "RSU-ADVISORY: Intersection Clear (Safe Transit)";
-        advColor = "blue";
-    }
-
-    // Clear previous vehicle transmission arrows and show RSU transmission to all vehicles in range
-    clearTransmissionArrows();
-    for (const auto& kv : vehicleRecords) {
-        double d = curPosition.distance(kv.second.lastPos);
-        if (d <= maxCommunicationRange) {
-            addTransmissionArrow(curPosition, kv.second.lastPos, advColor);
-        }
     }
 
     advisory->setName(advName.c_str());
     advisory->setSenderPos(curPosition);
     advisory->setSenderSpeed(Coord(0, 0, 0));
     sendDown(advisory);
+}
+
+Coord EdgeTrustRSUApp::getModuleVisualPos(cModule* mod, const Coord& fallbackPos)
+{
+    if (!mod) return fallbackPos;
+    const char* px = mod->getDisplayString().getTagArg("p", 0);
+    const char* py = mod->getDisplayString().getTagArg("p", 1);
+    if (px && py && px[0] != '\0' && py[0] != '\0') {
+        try {
+            double x = std::stod(px);
+            double y = std::stod(py);
+            return Coord(x, y);
+        } catch (...) {}
+    }
+    return fallbackPos;
 }
 
 void EdgeTrustRSUApp::clearTransmissionArrows()
@@ -468,7 +482,7 @@ void EdgeTrustRSUApp::addTransmissionArrow(const Coord& from, const Coord& to, c
     arrow->setStart(cFigure::Point(from.x, from.y));
     arrow->setEnd(cFigure::Point(to.x, to.y));
     arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
-    arrow->setLineWidth(color == "red" ? 3.2 : 2.0);
+    arrow->setLineWidth(color == "red" ? 3.5 : 2.5);
     arrow->setLineColor(cFigure::Color(color.c_str()));
     arrow->setZoomLineWidth(true);
     arrow->setVisible(true);

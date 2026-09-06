@@ -58,6 +58,7 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void broadcastSafetyAdvisory(int targetVehicleId, const std::string& verdict, double confidence);
     virtual void clearTransmissionArrows();
     virtual void addTransmissionArrow(const Coord& from, const Coord& to, const std::string& color);
+    virtual Coord getModuleVisualPos(cModule* mod, const Coord& fallbackPos);
 
     virtual void logVehicleFeatures(int nodeId, double posX, double posY,
                                    double speed, double direction, double acceleration,
