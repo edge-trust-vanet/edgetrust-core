@@ -4,6 +4,7 @@
 #include "veins/modules/application/ieee80211p/DemoBaseApplLayer.h"
 #include "veins/modules/application/edgetrust/EdgeTrustSafetyMessage_m.h"
 #include "veins/modules/application/edgetrust/AdaBoostPredictor.h"
+#include "veins/modules/application/edgetrust/RandomForestPredictor.h"
 #include <omnetpp/ccanvas.h>
 #include <map>
 #include <fstream>
@@ -66,6 +67,7 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
                                    int dosAttempts, int isMalicious);
 
     int rsuId = 0;
+    std::string mlModel = "adaboost";
     std::string csvOutputPath;
     std::string mlDataCsvPath;
     double maxCommunicationRange = 85.0; // Realistic 802.11p RSU range (meters)

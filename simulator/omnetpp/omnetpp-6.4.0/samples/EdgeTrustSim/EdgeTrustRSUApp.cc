@@ -32,11 +32,13 @@ void EdgeTrustRSUApp::initialize(int stage)
     DemoBaseApplLayer::initialize(stage);
     if (stage == 0) {
         rsuId = hasPar("rsuId") ? par("rsuId").intValue() : findHost()->getIndex();
+        mlModel = hasPar("mlModel") ? par("mlModel").stdstringValue() : "adaboost";
         csvOutputPath = hasPar("csvOutputPath") ? par("csvOutputPath").stringValue() : "results/live_extracted_features.csv";
         mlDataCsvPath = hasPar("mlDataCsvPath") ? par("mlDataCsvPath").stringValue() : "../../../../../edgetrust-ml/data/live_extracted_features.csv";
         maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
 
-        findHost()->getDisplayString().setTagArg("t", 0, "RSU: AdaBoost Active");
+        std::string initBadge = (mlModel == "random_forest") ? "RSU: Random Forest Active" : "RSU: AdaBoost Active";
+        findHost()->getDisplayString().setTagArg("t", 0, initBadge.c_str());
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
         findHost()->getDisplayString().setTagArg("i", 1, "green");
@@ -274,7 +276,7 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.signalStrength = rssi;
     rec.retransmissionCount = retx;
 
-    // ── AdaBoost Edge AI Inference ────────────────────────────
+    // ── Edge AI Inference (AdaBoost and Random Forest) ────────
     double rawFeatures[8] = {
         reportedSpeed,
         calcAccel,
@@ -286,17 +288,37 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         rssi
     };
 
-    int mlPred = AdaBoostPredictor::predict(rawFeatures);
-    double mlConf = AdaBoostPredictor::predictProba(rawFeatures); // probability of malicious
+    // 1. AdaBoost Model (from models/AdaBoost.pkl)
+    int adaPred = AdaBoostPredictor::predict(rawFeatures);
+    double adaConf = AdaBoostPredictor::predictProba(rawFeatures);
 
-    rec.lastMlPrediction = mlPred;
-    rec.lastMlConfidence = mlConf;
+    // 2. Random Forest Model (from models/Random_Forest_GridSearch.pkl)
+    int rfPred = RandomForestPredictor::predict(rawFeatures);
+    double rfConf = RandomForestPredictor::predictProba(rawFeatures);
+
+    // Select Active Model based on mlModel configuration
+    int activePred;
+    double activeConf;
+    std::string activeModelName;
+
+    if (mlModel == "random_forest") {
+        activePred = rfPred;
+        activeConf = rfConf;
+        activeModelName = "RandomForest";
+    } else {
+        activePred = adaPred;
+        activeConf = adaConf;
+        activeModelName = "AdaBoost";
+    }
+
+    rec.lastMlPrediction = activePred;
+    rec.lastMlConfidence = activeConf;
 
     // ── Hybrid Decision Engine ────────────────────────────────
     std::string verdict;
-    if (rec.trustScore < 0.40 && mlPred == 1) {
+    if (rec.trustScore < 0.40 && activePred == 1) {
         verdict = "BLOCK";
-    } else if (rec.trustScore < 0.40 || mlPred == 1) {
+    } else if (rec.trustScore < 0.70 || activePred == 1) {
         verdict = "WARN";
     } else {
         verdict = "ACCEPT";
@@ -308,9 +330,9 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     drawArrow(reportedPos, curPosition, arrowColor, "arrow_v" + std::to_string(senderId) + "_to_rsu");
 
     // ── Persistent Visual GUI Feedback in OMNeT++ Qtenv ───────
-    char badge[140];
-    snprintf(badge, sizeof(badge), "RSU-%d [AdaBoost: %s V%d | ML: %d%% | Trust: %.2f]",
-             rsuId, verdict.c_str(), senderId, (int)(mlConf * 100), rec.trustScore);
+    char badge[160];
+    snprintf(badge, sizeof(badge), "RSU-%d [%s: %s V%d | ML: %d%% | Trust: %.2f]",
+             rsuId, activeModelName.c_str(), verdict.c_str(), senderId, (int)(activeConf * 100), rec.trustScore);
     findHost()->getDisplayString().setTagArg("t", 0, badge);
     findHost()->getDisplayString().setTagArg("t", 1, "t");
     findHost()->getDisplayString().setTagArg("t", 2, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "orange" : "darkgreen")));
@@ -318,36 +340,39 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
 
     EV_INFO << "============================================================" << endl;
     EV_INFO << " [t=" << currentTime << "s] BSM from Node " << senderId
-            << " | Pos: (" << reportedPos.x << ", " << reportedPos.y << ")"
-            << " | Spd: " << reportedSpeed << " m/s" << endl;
+            << " | Active ML Model: [" << activeModelName << "]" << endl;
     EV_INFO << "   -> Kinematics: Plausibility=" << plausibility
             << " | Consistency=" << consistency
             << " | DropRatio=" << rec.packetDropRatio << endl;
-    EV_INFO << "   -> AdaBoost Edge AI: " << (mlPred == 1 ? "MALICIOUS" : "NORMAL")
-            << " (Conf: " << (int)(mlConf * 100) << "%)"
-            << " | Direct Trust: " << rec.trustScore
-            << " (Hist: " << rec.historicalTrustScore << ")" << endl;
+    EV_INFO << "   -> Models Comparison:" << endl;
+    EV_INFO << "      * AdaBoost:      " << (adaPred == 1 ? "MALICIOUS" : "NORMAL")
+            << " (Conf: " << (int)(adaConf * 100) << "%)" << (activeModelName == "AdaBoost" ? " [ACTIVE]" : "") << endl;
+    EV_INFO << "      * Random Forest: " << (rfPred == 1 ? "MALICIOUS" : "NORMAL")
+            << " (Conf: " << (int)(rfConf * 100) << "%)" << (activeModelName == "RandomForest" ? " [ACTIVE]" : "") << endl;
+    EV_INFO << "   -> Trust Engine: Direct=" << rec.trustScore
+            << " | Hist=" << rec.historicalTrustScore
+            << " | NeighborAvg=" << rec.neighborTrustScoreAvg << endl;
     EV_INFO << "   ==> FINAL HYBRID VERDICT: [" << verdict << "]" << endl;
     EV_INFO << "============================================================" << endl;
 
     if (verdict == "BLOCK") {
-        std::string btext = "AdaBoost: BLOCK! [Node " + std::to_string(senderId) + " Malicious (" + std::to_string((int)(mlConf * 100)) + "%)]";
+        std::string btext = activeModelName + ": BLOCK! [Node " + std::to_string(senderId) + " Malicious (" + std::to_string((int)(activeConf * 100)) + "%)]";
         findHost()->bubble(btext.c_str());
-        EV_WARN << "RSU " << rsuId << " [AdaBoost + Trust Engine]: BLOCKED Node " << senderId
-                << " (Malicious Confidence: " << (mlConf * 100) << "%, Trust: " << rec.trustScore << ")" << endl;
+        EV_WARN << "RSU " << rsuId << " [" << activeModelName << " + Trust Engine]: BLOCKED Node " << senderId
+                << " (Confidence: " << (activeConf * 100) << "%, Trust: " << rec.trustScore << ")" << endl;
 
         // Broadcast Safety Advisory warning to surrounding vehicles
-        broadcastSafetyAdvisory(senderId, "BLOCK", mlConf);
+        broadcastSafetyAdvisory(senderId, "BLOCK", activeConf);
     } else if (verdict == "WARN") {
-        std::string btext = "AdaBoost: WARN [Node " + std::to_string(senderId) + " Suspicious]";
+        std::string btext = activeModelName + ": WARN [Node " + std::to_string(senderId) + " Suspicious]";
         findHost()->bubble(btext.c_str());
     } else {
-        std::string btext = "AdaBoost: ACCEPT [Node " + std::to_string(senderId) + " Verified]";
+        std::string btext = activeModelName + ": ACCEPT [Node " + std::to_string(senderId) + " Verified]";
         findHost()->bubble(btext.c_str());
 
         // Periodically broadcast routine green advisory
         if (seqNo % 6 == 0) {
-            broadcastSafetyAdvisory(senderId, "CLEAR", (1.0 - mlConf));
+            broadcastSafetyAdvisory(senderId, "CLEAR", (1.0 - activeConf));
         }
     }
 
