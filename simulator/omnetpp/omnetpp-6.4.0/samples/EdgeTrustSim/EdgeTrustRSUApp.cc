@@ -288,51 +288,68 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         rssi
     };
 
-    // 1. AdaBoost Model (from models/AdaBoost.pkl)
-    int adaPred = AdaBoostPredictor::predict(rawFeatures);
-    double adaConf = AdaBoostPredictor::predictProba(rawFeatures);
-
-    // 2. Random Forest Model (from models/Random_Forest_GridSearch.pkl)
-    int rfPred = RandomForestPredictor::predict(rawFeatures);
-    double rfConf = RandomForestPredictor::predictProba(rawFeatures);
-
-    // Select Active Model based on mlModel configuration
-    int activePred;
-    double activeConf;
-    std::string activeModelName;
+    // ── Edge ML Model Inference ───────────────────────────────
+    // Run ONLY the single deployed model configured for this simulation
+    int mlPred = 0;
+    double maliciousProba = 0.0;
+    std::string modelDisplayName;
 
     if (mlModel == "random_forest") {
-        activePred = rfPred;
-        activeConf = rfConf;
-        activeModelName = "RandomForest";
+        mlPred = RandomForestPredictor::predict(rawFeatures);
+        maliciousProba = RandomForestPredictor::predictProba(rawFeatures);
+        modelDisplayName = "RandomForest";
     } else {
-        activePred = adaPred;
-        activeConf = adaConf;
-        activeModelName = "AdaBoost";
+        mlPred = AdaBoostPredictor::predict(rawFeatures);
+        maliciousProba = AdaBoostPredictor::predictProba(rawFeatures);
+        modelDisplayName = "AdaBoost";
     }
 
-    rec.lastMlPrediction = activePred;
-    rec.lastMlConfidence = activeConf;
+    // ── Confidence of the Classified Class ────────────────────
+    // maliciousProba is P(Malicious). The confidence of the PREDICTED class is:
+    // - For MALICIOUS (class 1): P(Malicious) in [0.50, 1.00]
+    // - For NORMAL    (class 0): P(Normal) = 1.0 - P(Malicious) in [0.50, 1.00]
+    // Hence, classConfidence is ALWAYS >= 50%
+    double classConfidence = (mlPred == 1) ? maliciousProba : (1.0 - maliciousProba);
+
+    rec.lastMlPrediction = mlPred;
+    rec.lastMlConfidence = classConfidence;
 
     // ── Hybrid Decision Engine ────────────────────────────────
     std::string verdict;
-    if (rec.trustScore < 0.40 && activePred == 1) {
+    if (rec.trustScore < 0.40 && mlPred == 1) {
         verdict = "BLOCK";
-    } else if (rec.trustScore < 0.70 || activePred == 1) {
+    } else if (rec.trustScore < 0.70 || mlPred == 1) {
         verdict = "WARN";
     } else {
         verdict = "ACCEPT";
     }
     rec.lastVerdict = verdict;
 
-    // ── Draw Visible Direction Arrow (Sender -> RSU) ──────────
-    std::string arrowColor = (verdict == "BLOCK") ? "red" : (verdict == "WARN" ? "yellow" : "green");
-    drawArrow(reportedPos, curPosition, arrowColor, "arrow_v" + std::to_string(senderId) + "_to_rsu");
+    // ── Direction Arrows on Line of Transmission ──────────────
+    // Old arrows from previous node/RSU transmissions disappear,
+    // and only arrows for the current transmission are displayed.
+    clearTransmissionArrows();
 
-    // ── Persistent Visual GUI Feedback in OMNeT++ Qtenv ───────
+    std::string arrowColor = (verdict == "BLOCK") ? "red" : (verdict == "WARN" ? "orange" : "green");
+
+    // 1. Arrow along transmission line: Current Transmitting Vehicle -> Receiving RSU
+    addTransmissionArrow(reportedPos, curPosition, arrowColor);
+
+    // 2. Arrows along transmission line: Current Transmitting Vehicle -> Receiving Peer Vehicles within 85m range
+    for (const auto& kv : vehicleRecords) {
+        if (kv.first != senderId) {
+            double d = reportedPos.distance(kv.second.lastPos);
+            if (d <= maxCommunicationRange && (currentTime - kv.second.lastTime).dbl() < 2.5) {
+                addTransmissionArrow(reportedPos, kv.second.lastPos, arrowColor);
+            }
+        }
+    }
+
+    // ── Visual GUI Feedback in OMNeT++ Qtenv ──────────────────
     char badge[160];
-    snprintf(badge, sizeof(badge), "RSU-%d [%s: %s V%d | ML: %d%% | Trust: %.2f]",
-             rsuId, activeModelName.c_str(), verdict.c_str(), senderId, (int)(activeConf * 100), rec.trustScore);
+    snprintf(badge, sizeof(badge), "RSU-%d [%s: %s V%d | %s: %d%% | Trust: %.2f]",
+             rsuId, modelDisplayName.c_str(), verdict.c_str(), senderId,
+             (mlPred == 1 ? "MAL" : "NORM"), (int)(classConfidence * 100), rec.trustScore);
     findHost()->getDisplayString().setTagArg("t", 0, badge);
     findHost()->getDisplayString().setTagArg("t", 1, "t");
     findHost()->getDisplayString().setTagArg("t", 2, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "orange" : "darkgreen")));
@@ -340,15 +357,13 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
 
     EV_INFO << "============================================================" << endl;
     EV_INFO << " [t=" << currentTime << "s] BSM from Node " << senderId
-            << " | Active ML Model: [" << activeModelName << "]" << endl;
+            << " | Deployed Edge Model: [" << modelDisplayName << "]" << endl;
     EV_INFO << "   -> Kinematics: Plausibility=" << plausibility
             << " | Consistency=" << consistency
             << " | DropRatio=" << rec.packetDropRatio << endl;
-    EV_INFO << "   -> Models Comparison:" << endl;
-    EV_INFO << "      * AdaBoost:      " << (adaPred == 1 ? "MALICIOUS" : "NORMAL")
-            << " (Conf: " << (int)(adaConf * 100) << "%)" << (activeModelName == "AdaBoost" ? " [ACTIVE]" : "") << endl;
-    EV_INFO << "      * Random Forest: " << (rfPred == 1 ? "MALICIOUS" : "NORMAL")
-            << " (Conf: " << (int)(rfConf * 100) << "%)" << (activeModelName == "RandomForest" ? " [ACTIVE]" : "") << endl;
+    EV_INFO << "   -> " << modelDisplayName << " Verdict: "
+            << (mlPred == 1 ? "MALICIOUS" : "NORMAL")
+            << " (Confidence: " << (int)(classConfidence * 100) << "%)" << endl;
     EV_INFO << "   -> Trust Engine: Direct=" << rec.trustScore
             << " | Hist=" << rec.historicalTrustScore
             << " | NeighborAvg=" << rec.neighborTrustScoreAvg << endl;
@@ -356,23 +371,23 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     EV_INFO << "============================================================" << endl;
 
     if (verdict == "BLOCK") {
-        std::string btext = activeModelName + ": BLOCK! [Node " + std::to_string(senderId) + " Malicious (" + std::to_string((int)(activeConf * 100)) + "%)]";
+        std::string btext = modelDisplayName + ": BLOCK! [Node " + std::to_string(senderId) + " Malicious (" + std::to_string((int)(classConfidence * 100)) + "%)]";
         findHost()->bubble(btext.c_str());
-        EV_WARN << "RSU " << rsuId << " [" << activeModelName << " + Trust Engine]: BLOCKED Node " << senderId
-                << " (Confidence: " << (activeConf * 100) << "%, Trust: " << rec.trustScore << ")" << endl;
+        EV_WARN << "RSU " << rsuId << " [" << modelDisplayName << " + Trust Engine]: BLOCKED Node " << senderId
+                << " (Confidence: " << (int)(classConfidence * 100) << "%, Trust: " << rec.trustScore << ")" << endl;
 
         // Broadcast Safety Advisory warning to surrounding vehicles
-        broadcastSafetyAdvisory(senderId, "BLOCK", activeConf);
+        broadcastSafetyAdvisory(senderId, "BLOCK", classConfidence);
     } else if (verdict == "WARN") {
-        std::string btext = activeModelName + ": WARN [Node " + std::to_string(senderId) + " Suspicious]";
+        std::string btext = modelDisplayName + ": WARN [Node " + std::to_string(senderId) + " Suspicious (" + std::to_string((int)(classConfidence * 100)) + "%)]";
         findHost()->bubble(btext.c_str());
     } else {
-        std::string btext = activeModelName + ": ACCEPT [Node " + std::to_string(senderId) + " Verified]";
+        std::string btext = modelDisplayName + ": ACCEPT [Node " + std::to_string(senderId) + " Verified (" + std::to_string((int)(classConfidence * 100)) + "%)]";
         findHost()->bubble(btext.c_str());
 
         // Periodically broadcast routine green advisory
         if (seqNo % 6 == 0) {
-            broadcastSafetyAdvisory(senderId, "CLEAR", (1.0 - activeConf));
+            broadcastSafetyAdvisory(senderId, "CLEAR", classConfidence);
         }
     }
 
@@ -393,15 +408,22 @@ void EdgeTrustRSUApp::broadcastSafetyAdvisory(int targetVehicleId, const std::st
     populateWSM(advisory);
 
     std::string advName;
+    std::string advColor;
     if (verdict == "BLOCK") {
         advName = "RSU-ADVISORY: Rogue Node " + std::to_string(targetVehicleId) + " Blocked!";
-        // Draw radiating blue advisory arrows
-        drawArrow(curPosition, Coord(curPosition.x + 35, curPosition.y), "blue", "rsu_adv_e");
-        drawArrow(curPosition, Coord(curPosition.x - 35, curPosition.y), "blue", "rsu_adv_w");
-        drawArrow(curPosition, Coord(curPosition.x, curPosition.y + 35), "blue", "rsu_adv_n");
-        drawArrow(curPosition, Coord(curPosition.x, curPosition.y - 35), "blue", "rsu_adv_s");
+        advColor = "red";
     } else {
         advName = "RSU-ADVISORY: Intersection Clear (Safe Transit)";
+        advColor = "blue";
+    }
+
+    // Clear previous vehicle transmission arrows and show RSU transmission to all vehicles in range
+    clearTransmissionArrows();
+    for (const auto& kv : vehicleRecords) {
+        double d = curPosition.distance(kv.second.lastPos);
+        if (d <= maxCommunicationRange) {
+            addTransmissionArrow(curPosition, kv.second.lastPos, advColor);
+        }
     }
 
     advisory->setName(advName.c_str());
@@ -410,25 +432,47 @@ void EdgeTrustRSUApp::broadcastSafetyAdvisory(int targetVehicleId, const std::st
     sendDown(advisory);
 }
 
-void EdgeTrustRSUApp::drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId)
+void EdgeTrustRSUApp::clearTransmissionArrows()
 {
     cModule* parent = findHost()->getParentModule();
     if (!parent) return;
     cCanvas* canvas = parent->getCanvas();
     if (!canvas) return;
 
-    cLineFigure* arrow = dynamic_cast<cLineFigure*>(canvas->getFigure(arrowId.c_str()));
-    if (!arrow) {
-        arrow = new cLineFigure(arrowId.c_str());
-        arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
-        arrow->setZoomLineWidth(true);
-        canvas->addFigure(arrow);
+    cGroupFigure* group = dynamic_cast<cGroupFigure*>(canvas->getFigure("activeTxArrows"));
+    if (group) {
+        while (group->getNumFigures() > 0) {
+            cFigure* fig = group->removeFigure(0);
+            delete fig;
+        }
     }
+}
+
+void EdgeTrustRSUApp::addTransmissionArrow(const Coord& from, const Coord& to, const std::string& color)
+{
+    if (from.distance(to) < 1.0) return;
+
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cCanvas* canvas = parent->getCanvas();
+    if (!canvas) return;
+
+    cGroupFigure* group = dynamic_cast<cGroupFigure*>(canvas->getFigure("activeTxArrows"));
+    if (!group) {
+        group = new cGroupFigure("activeTxArrows");
+        group->setZIndex(100);
+        canvas->addFigure(group);
+    }
+
+    cLineFigure* arrow = new cLineFigure();
     arrow->setStart(cFigure::Point(from.x, from.y));
     arrow->setEnd(cFigure::Point(to.x, to.y));
-    arrow->setLineWidth(color == "red" ? 3.5 : 2.2);
+    arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
+    arrow->setLineWidth(color == "red" ? 3.2 : 2.0);
     arrow->setLineColor(cFigure::Color(color.c_str()));
+    arrow->setZoomLineWidth(true);
     arrow->setVisible(true);
+    group->addFigure(arrow);
 }
 
 void EdgeTrustRSUApp::logVehicleFeatures(int nodeId, double posX, double posY,
@@ -482,6 +526,7 @@ void EdgeTrustRSUApp::logVehicleFeatures(int nodeId, double posX, double posY,
 
 void EdgeTrustRSUApp::finish()
 {
+    clearTransmissionArrows();
     DemoBaseApplLayer::finish();
     EV_INFO << "EdgeTrust RSU " << rsuId << " finished. Total extracted records: "
             << totalExtractedRecords << endl;
