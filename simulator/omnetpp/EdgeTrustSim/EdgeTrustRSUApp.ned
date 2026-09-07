@@ -9,7 +9,7 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         @class(veins::EdgeTrustRSUApp);
         @display("i=block/app2");
         int rsuId = default(0);
-        string mlModel = default("adaboost"); // "adaboost" or "random_forest"
+        string mlModel = default("random_forest"); // "random_forest" or "lightgbm"
         string csvOutputPath = default("results/live_extracted_features.csv");
         string mlDataCsvPath = default("../../../../../edgetrust-ml/data/live_extracted_features.csv");
         double maxCommunicationRange @unit(m) = default(85m);

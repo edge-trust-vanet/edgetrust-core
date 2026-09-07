@@ -32,12 +32,12 @@ void EdgeTrustRSUApp::initialize(int stage)
     DemoBaseApplLayer::initialize(stage);
     if (stage == 0) {
         rsuId = hasPar("rsuId") ? par("rsuId").intValue() : findHost()->getIndex();
-        mlModel = hasPar("mlModel") ? par("mlModel").stdstringValue() : "adaboost";
+        mlModel = hasPar("mlModel") ? par("mlModel").stdstringValue() : "random_forest";
         csvOutputPath = hasPar("csvOutputPath") ? par("csvOutputPath").stringValue() : "results/live_extracted_features.csv";
         mlDataCsvPath = hasPar("mlDataCsvPath") ? par("mlDataCsvPath").stringValue() : "../../../../../edgetrust-ml/data/live_extracted_features.csv";
         maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
 
-        std::string initBadge = (mlModel == "random_forest") ? "RSU: Random Forest Active" : "RSU: AdaBoost Active";
+        std::string initBadge = (mlModel == "lightgbm") ? "RSU: LightGBM Active" : "RSU: Random Forest Active";
         findHost()->getDisplayString().setTagArg("t", 0, initBadge.c_str());
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
@@ -73,7 +73,7 @@ void EdgeTrustRSUApp::initialize(int stage)
             totalExtractedRecords = 0;
         }
 
-        EV_INFO << "EdgeTrust RSU " << rsuId << " [AdaBoost Edge AI] online at intersection." << endl;
+        EV_INFO << "EdgeTrust RSU " << rsuId << " [" << (mlModel == "lightgbm" ? "LightGBM" : "Random Forest") << " Edge AI] online at intersection." << endl;
     }
 }
 
@@ -306,33 +306,39 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.signalStrength = rssi;
     rec.retransmissionCount = retx;
 
-    // ── Edge AI Inference (AdaBoost and Random Forest) ────────
+    // ── Edge AI Inference (Random Forest and LightGBM) ────────
     double effectiveAccel = (std::abs(reportedAccel) > std::abs(calcAccel)) ? reportedAccel : calcAccel;
-    double rawFeatures[8] = {
-        reportedSpeed,
-        effectiveAccel,
+    double rawFeatures[14] = {
         reportedPos.x,
         reportedPos.y,
+        reportedSpeed,
         headingDeg,
+        effectiveAccel,
+        (double)rec.packetSent,
+        (double)rec.packetReceived,
         rec.packetDropRatio,
         latency,
-        rssi
+        (double)retx,
+        rssi,
+        rec.trustScore,
+        rec.neighborTrustScoreAvg,
+        rec.historicalTrustScore
     };
 
     // ── Edge ML Model Inference ───────────────────────────────
-    // Run ONLY the single deployed model configured for this simulation
+    // Run ONLY the single deployed model configured for this simulation (Random Forest or LightGBM)
     int mlPred = 0;
     double maliciousProba = 0.0;
     std::string modelDisplayName;
 
-    if (mlModel == "random_forest") {
+    if (mlModel == "lightgbm") {
+        mlPred = LightGBMPredictor::predict(rawFeatures);
+        maliciousProba = LightGBMPredictor::predictProba(rawFeatures);
+        modelDisplayName = "LightGBM";
+    } else {
         mlPred = RandomForestPredictor::predict(rawFeatures);
         maliciousProba = RandomForestPredictor::predictProba(rawFeatures);
         modelDisplayName = "RandomForest";
-    } else {
-        mlPred = AdaBoostPredictor::predict(rawFeatures);
-        maliciousProba = AdaBoostPredictor::predictProba(rawFeatures);
-        modelDisplayName = "AdaBoost";
     }
 
     // ── Confidence of the Classified Class ────────────────────

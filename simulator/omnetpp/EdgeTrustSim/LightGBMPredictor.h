@@ -1,12 +1,12 @@
-#ifndef __RANDOM_FOREST_PREDICTOR_H_
-#define __RANDOM_FOREST_PREDICTOR_H_
+#ifndef __LIGHTGBM_PREDICTOR_H_
+#define __LIGHTGBM_PREDICTOR_H_
 
 /**
- * RandomForestPredictor.h
+ * LightGBMPredictor.h
  * ─────────────────────────────────────────────────────────────
  * Auto-generated C++ classifier exported from the trained
- * scikit-learn Random Forest model (unified_Random_Forest.pkl)
- * and scaler (unified_scaler.pkl) from edgetrust-ml/models/.
+ * LightGBM model (unified_LightGBM.pkl) and scaler (unified_scaler.pkl)
+ * from edgetrust-ml/models/.
  *
  * Provides sub-microsecond edge inference directly inside RSU.
  *
@@ -32,10 +32,10 @@
 
 namespace veins {
 
-class VEINS_API RandomForestPredictor {
+class VEINS_API LightGBMPredictor {
   public:
     static constexpr int N_FEATURES = 14;
-    static constexpr int N_ESTIMATORS = 150;
+    static constexpr int N_TREES = 180;
 
     static int predict(const double raw[N_FEATURES]);
     static double predictProba(const double raw[N_FEATURES]);
@@ -43,4 +43,4 @@ class VEINS_API RandomForestPredictor {
 
 } // namespace veins
 
-#endif // __RANDOM_FOREST_PREDICTOR_H_
+#endif // __LIGHTGBM_PREDICTOR_H_
