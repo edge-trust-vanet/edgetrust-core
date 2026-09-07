@@ -13,4 +13,8 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         string csvOutputPath = default("results/live_extracted_features.csv");
         string mlDataCsvPath = default("../../../../../edgetrust-ml/data/live_extracted_features.csv");
         double maxCommunicationRange @unit(m) = default(85m);
+        bool saveCheckpoint = default(true);
+        bool loadCheckpoint = default(false);
+        string checkpointFile = default("results/checkpoint_state.json");
+        double checkpointInterval @unit(s) = default(25s);
 }
