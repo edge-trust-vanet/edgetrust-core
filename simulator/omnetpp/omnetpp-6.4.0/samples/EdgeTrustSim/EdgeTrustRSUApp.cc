@@ -134,7 +134,8 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rssi = std::max(-98.0, std::min(-32.0, rssi));
 
     // Latency (milliseconds)
-    double latency = (currentTime - bsm->getCreationTime()).dbl() * 1000.0;
+    simtime_t sendTime = (bsm->getTimestamp() > SIMTIME_ZERO) ? bsm->getTimestamp() : bsm->getCreationTime();
+    double latency = (currentTime - sendTime).dbl() * 1000.0;
     if (latency < 2.0) {
         latency = 14.5 + (retx * 7.5) + ((rand() % 2500) / 100.0);
     }
@@ -194,7 +195,6 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         plausibility = 0.02;
         rec.falsePacketInjection++;
     }
-
     // ── Trust Factor 2: Message Consistency (weight: 0.30) ───────────────────
     double consistency = 1.0;
     if (calcAccel < -6.0 || calcAccel > 4.5) {
@@ -202,6 +202,15 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     }
     if (reportedSpeed > 35.0) {
         consistency = std::max(0.05, consistency - 0.40);
+    }
+
+    // VeReMi suddenStop / zeroSpeedReport anomaly (impossible deceleration or sudden freeze while at speed)
+    double accelDiscrepancy = std::abs(reportedAccel - calcAccel);
+    if (reportedAccel < -8.0 || accelDiscrepancy > 5.0 || (calcAccel < -8.0 && rec.lastSpeed > 4.0) ||
+        (reportedSpeed == 0.0 && rec.lastSpeed > 5.0 && distanceMoved < 0.5)) {
+        plausibility = 0.02;
+        consistency = 0.05;
+        rec.falsePacketInjection++;
     }
     if (rec.falsePacketInjection > 0) {
         consistency = std::min(consistency, 0.06);
@@ -224,6 +233,11 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     double latencyPenalty = std::min(0.30, latency > 50.0 ? (latency - 50.0) / 150.0 : 0.0);
     double commScore = std::max(0.02, pdr - retxPenalty - latencyPenalty);
 
+    // VeReMi timeDelay / stale replay attack detection
+    if (latency > 500.0) {
+        commScore = std::min(commScore, 0.04);
+        rec.falsePacketInjection++;
+    }
     if (rec.falsePacketInjection > 0) {
         commScore = std::min(commScore, 0.08);
     }
@@ -238,11 +252,13 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     // Sybil Attack Detection
     if (senderId > 100 || (senderId % 100 != 0 && (senderId % 10 == 0))) {
         rec.sybilAttackAttempts++;
+        commScore = std::min(commScore, 0.08);
+        consistency = std::min(consistency, 0.10);
     }
 
     // ── Trust Factor 4: Neighbor Validation Consensus (weight: 0.20) ─────────
     double neighborValidation = 0.95;
-    if (rec.falsePacketInjection > 0 || rec.blackholeAttackAttempts > 0) {
+    if (rec.falsePacketInjection > 0 || rec.blackholeAttackAttempts > 0 || rec.denialOfService > 0 || rec.sybilAttackAttempts > 0) {
         neighborValidation = 0.06;
     } else {
         // Natural small RF / spatial channel variance (+/- 0.03)
@@ -277,9 +293,10 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.retransmissionCount = retx;
 
     // ── Edge AI Inference (AdaBoost and Random Forest) ────────
+    double effectiveAccel = (std::abs(reportedAccel) > std::abs(calcAccel)) ? reportedAccel : calcAccel;
     double rawFeatures[8] = {
         reportedSpeed,
-        calcAccel,
+        effectiveAccel,
         reportedPos.x,
         reportedPos.y,
         headingDeg,
@@ -464,29 +481,7 @@ void EdgeTrustRSUApp::clearTransmissionArrows()
 
 void EdgeTrustRSUApp::addTransmissionArrow(const Coord& from, const Coord& to, const std::string& color)
 {
-    if (from.distance(to) < 1.0) return;
-
-    cModule* parent = findHost()->getParentModule();
-    if (!parent) return;
-    cCanvas* canvas = parent->getCanvas();
-    if (!canvas) return;
-
-    cGroupFigure* group = dynamic_cast<cGroupFigure*>(canvas->getFigure("activeTxArrows"));
-    if (!group) {
-        group = new cGroupFigure("activeTxArrows");
-        group->setZIndex(100);
-        canvas->addFigure(group);
-    }
-
-    cLineFigure* arrow = new cLineFigure();
-    arrow->setStart(cFigure::Point(from.x, from.y));
-    arrow->setEnd(cFigure::Point(to.x, to.y));
-    arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
-    arrow->setLineWidth(color == "red" ? 3.5 : 2.5);
-    arrow->setLineColor(cFigure::Color(color.c_str()));
-    arrow->setZoomLineWidth(true);
-    arrow->setVisible(true);
-    group->addFigure(arrow);
+    // Canvas arrows disabled for clean, clutter-free GUI presentation
 }
 
 void EdgeTrustRSUApp::logVehicleFeatures(int nodeId, double posX, double posY,

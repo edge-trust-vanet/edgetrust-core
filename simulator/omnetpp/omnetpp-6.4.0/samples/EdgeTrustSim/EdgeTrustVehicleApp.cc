@@ -11,43 +11,159 @@ void EdgeTrustVehicleApp::initialize(int stage)
 {
     DemoBaseApplLayer::initialize(stage);
     if (stage == 0) {
-        // Vehicle ID 1-indexed based on OMNeT++ node index
         vehicleId = findHost()->getIndex() + 1;
 
+        scenarioMode = hasPar("scenarioMode") ? par("scenarioMode").stdstringValue() : "mixed";
         maliciousRatio = hasPar("maliciousRatio") ? par("maliciousRatio").doubleValue() : 0.25;
         maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
 
-        // Guaranteed early attack demonstration:
-        // Node 1: Legitimate baseline
-        // Node 2: Attacking after 2 normal messages (FDI False Data Injection)
-        // Node 3: Attacking after 2 normal messages (Blackhole Packet Dropping)
-        if (vehicleId == 1) {
+        // Configure attack profiles based on scenarioMode
+        if (scenarioMode == "baseline") {
+            // All vehicles legitimate
             isMalicious = false;
-            attackType = 0;
+            attackType = ATTACK_NONE;
             attackStartMessage = 9999;
-        } else if (vehicleId == 2) {
-            isMalicious = true;
-            attackType = 1; // FDI (False Data Injection)
-            attackStartMessage = 3; // Trigger attack right after 2 normal message exchanges!
-        } else if (vehicleId == 3) {
-            isMalicious = true;
-            attackType = 2; // Blackhole Attack
-            attackStartMessage = 3;
-        } else {
-            unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
-            if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
+        } else if (scenarioMode == "fdi_position") {
+            // VeReMi constant/random position offset scenario
+            if (vehicleId == 1) {
+                isMalicious = false;
+                attackType = ATTACK_NONE;
+                attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
                 isMalicious = true;
-                attackType = (vehicleId % 4) + 1;
+                attackType = ATTACK_FDI_POS_OFFSET;
                 attackStartMessage = 3;
             } else {
+                isMalicious = ((vehicleId % 3) == 0);
+                attackType = isMalicious ? ATTACK_FDI_POS_OFFSET : ATTACK_NONE;
+                attackStartMessage = 3;
+            }
+        } else if (scenarioMode == "fdi_suddenstop") {
+            // VeReMi sudden stop & zero speed report scenario
+            if (vehicleId == 1) {
                 isMalicious = false;
-                attackType = 0;
+                attackType = ATTACK_NONE;
                 attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
+                isMalicious = true;
+                attackType = ATTACK_FDI_SUDDEN_STOP;
+                attackStartMessage = 3;
+            } else {
+                isMalicious = ((vehicleId % 3) == 0);
+                attackType = isMalicious ? ATTACK_FDI_SUDDEN_STOP : ATTACK_NONE;
+                attackStartMessage = 3;
+            }
+        } else if (scenarioMode == "dos") {
+            // VeReMi DoS high-rate flooding scenario
+            if (vehicleId == 1) {
+                isMalicious = false;
+                attackType = ATTACK_NONE;
+                attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
+                isMalicious = true;
+                attackType = ATTACK_DOS_FLOOD;
+                attackStartMessage = 3;
+            } else {
+                isMalicious = ((vehicleId % 3) == 0);
+                attackType = isMalicious ? ATTACK_DOS_FLOOD : ATTACK_NONE;
+                attackStartMessage = 3;
+            }
+        } else if (scenarioMode == "sybil") {
+            // VeReMi Sybil phantom congestion scenario
+            if (vehicleId == 1) {
+                isMalicious = false;
+                attackType = ATTACK_NONE;
+                attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
+                isMalicious = true;
+                attackType = ATTACK_SYBIL_PHANTOM;
+                attackStartMessage = 3;
+            } else {
+                isMalicious = ((vehicleId % 3) == 0);
+                attackType = isMalicious ? ATTACK_SYBIL_PHANTOM : ATTACK_NONE;
+                attackStartMessage = 3;
+            }
+        } else if (scenarioMode == "blackhole") {
+            // Blackhole selective beacon dropping scenario
+            if (vehicleId == 1) {
+                isMalicious = false;
+                attackType = ATTACK_NONE;
+                attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
+                isMalicious = true;
+                attackType = ATTACK_BLACKHOLE;
+                attackStartMessage = 3;
+            } else {
+                isMalicious = ((vehicleId % 3) == 0);
+                attackType = isMalicious ? ATTACK_BLACKHOLE : ATTACK_NONE;
+                attackStartMessage = 3;
+            }
+        } else if (scenarioMode == "timedelay") {
+            // VeReMi time delay & stale message replay scenario
+            if (vehicleId == 1) {
+                isMalicious = false;
+                attackType = ATTACK_NONE;
+                attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
+                isMalicious = true;
+                attackType = ATTACK_TIME_DELAY_REPLAY;
+                attackStartMessage = 3;
+            } else {
+                isMalicious = ((vehicleId % 3) == 0);
+                attackType = isMalicious ? ATTACK_TIME_DELAY_REPLAY : ATTACK_NONE;
+                attackStartMessage = 3;
+            }
+        } else {
+            // "mixed" mode (VeReMi mixAll / mixThree): heterogeneous attacks across vehicles
+            if (vehicleId == 1) {
+                isMalicious = false;
+                attackType = ATTACK_NONE;
+                attackStartMessage = 9999;
+            } else if (vehicleId == 2) {
+                isMalicious = true;
+                attackType = ATTACK_FDI_POS_OFFSET;
+                attackStartMessage = 3;
+            } else if (vehicleId == 3) {
+                isMalicious = true;
+                attackType = ATTACK_BLACKHOLE;
+                attackStartMessage = 3;
+            } else if (vehicleId == 4) {
+                isMalicious = true;
+                attackType = ATTACK_DOS_FLOOD;
+                attackStartMessage = 3;
+            } else if (vehicleId == 5) {
+                isMalicious = true;
+                attackType = ATTACK_SYBIL_PHANTOM;
+                attackStartMessage = 3;
+            } else if (vehicleId == 6) {
+                isMalicious = true;
+                attackType = ATTACK_FDI_SUDDEN_STOP;
+                attackStartMessage = 3;
+            } else if (vehicleId == 7) {
+                isMalicious = true;
+                attackType = ATTACK_TIME_DELAY_REPLAY;
+                attackStartMessage = 3;
+            } else {
+                unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
+                if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
+                    isMalicious = true;
+                    attackType = (vehicleId % 6) + 1;
+                    attackStartMessage = 3;
+                } else {
+                    isMalicious = false;
+                    attackType = ATTACK_NONE;
+                    attackStartMessage = 9999;
+                }
             }
         }
 
+        // Explicit overrides if set in ini/ned
         if (hasPar("isMalicious") && par("isMalicious").boolValue()) {
             isMalicious = true;
+        }
+        if (hasPar("attackType") && par("attackType").intValue() >= 0) {
+            attackType = par("attackType").intValue();
+            if (attackType > 0) isMalicious = true;
         }
 
         findHost()->getDisplayString().setTagArg("t", 0, "Initializing OBU...");
@@ -69,7 +185,7 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
         bool attackActive = (isMalicious && sequenceNumber >= attackStartMessage);
 
         // Blackhole attack: intentionally drop 70% of outgoing communications
-        bool dropThis = (attackActive && attackType == 2 && ((rand() % 10) < 7));
+        bool dropThis = (attackActive && attackType == ATTACK_BLACKHOLE && ((rand() % 10) < 7));
         if (dropThis) {
             totalPacketsDropped++;
             delete bsm;
@@ -80,12 +196,16 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
             findHost()->getDisplayString().setTagArg("i", 1, "red");
             EV_DEBUG << "Vehicle " << vehicleId << " [Blackhole] dropped its own beacon." << endl;
         } else {
+            // VeReMi Time Delay / Replay: artificially delay timestamp
+            if (attackActive && attackType == ATTACK_TIME_DELAY_REPLAY) {
+                bsm->setTimestamp(simTime() - simtime_t(3.0));
+            }
             sendDown(bsm);
             totalPacketsSent++;
         }
 
-        // DoS flooding: schedule much faster beacon rate (10-20 Hz instead of 1 Hz)
-        simtime_t nextInterval = (attackActive && attackType == 4) ? simtime_t(0.08) : beaconInterval;
+        // DoS flooding: schedule much faster beacon rate (16 Hz instead of 1 Hz)
+        simtime_t nextInterval = (attackActive && attackType == ATTACK_DOS_FLOOD) ? simtime_t(0.06) : beaconInterval;
         scheduleAt(simTime() + nextInterval, sendBeaconEvt);
     } else {
         DemoBaseApplLayer::handleSelfMsg(msg);
@@ -136,18 +256,31 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     lastTime = simTime();
     sequenceNumber++;
 
+    // Cache beacon data into history buffer for time delay / replay attack simulation
+    StaleBeaconData curEntry;
+    curEntry.creationTime = simTime();
+    curEntry.pos = currentPos;
+    curEntry.speed = currentSpd;
+    curEntry.heading = headingDeg;
+    curEntry.accel = accel;
+    curEntry.seq = sequenceNumber;
+    staleHistory.push_back(curEntry);
+    if (staleHistory.size() > 20) {
+        staleHistory.pop_front();
+    }
+
     int effectiveId = vehicleId;
-    int retx = (isMalicious && attackType == 2) ? (4 + (rand() % 6)) : (rand() % 3);
+    int retx = (isMalicious && attackType == ATTACK_BLACKHOLE) ? (4 + (rand() % 6)) : (rand() % 3);
     bool attackActive = (isMalicious && sequenceNumber >= attackStartMessage);
 
-    // ── Simulate Random Application Messages & Early Attacks ──
+    // ── Simulate VeReMi-NextGen Attack Scenarios ──
     std::string bsmPayload;
     if (attackActive) {
-        if (attackType == 1) {
-            // False Data Injection: Falsify position coordinates by 25m (different lane/branch) and speed to 0
+        if (attackType == ATTACK_FDI_POS_OFFSET) {
+            // VeReMi constant/random position offset: spoof position by ~28m
             currentPos.x += ((vehicleId % 2 == 0) ? 28.0 : -28.0);
             currentPos.y += ((vehicleId % 3 == 0) ? 22.0 : -22.0);
-            currentSpd = Coord(0, 0, 0); // Fake stopped vehicle / false accident
+            currentSpd = Coord(0, 0, 0); // Fake collision / stopped vehicle
             bsmPayload = "ATTACK: FDI Fake Crash (+28m)";
             findHost()->bubble(bsmPayload.c_str());
             char tagStr[96];
@@ -156,25 +289,70 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
             findHost()->getDisplayString().setTagArg("t", 1, "t");
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == 3) {
-            // Sybil Attack: Use alternate virtual IDs from same physical location
-            effectiveId = (vehicleId * 100) + (sequenceNumber % 4);
-            bsmPayload = "ATTACK: Sybil Ghost ID " + std::to_string(effectiveId);
+        } else if (attackType == ATTACK_FDI_SUDDEN_STOP) {
+            // VeReMi suddenStop / zeroSpeedReport: freeze position & report 0 speed while moving with feigned emergency braking
+            if (!suddenStopInitialized) {
+                suddenStopPos = curPosition;
+                suddenStopInitialized = true;
+            }
+            currentPos = suddenStopPos;
+            currentSpd = Coord(0, 0, 0);
+            spdMag = 0.0;
+            accel = -9.2; // VeReMi feigned hard braking / zero speed report
+            bsmPayload = "ATTACK: SuddenStop / ZeroSpeed";
             findHost()->bubble(bsmPayload.c_str());
-            findHost()->getDisplayString().setTagArg("t", 0, bsmPayload.c_str());
+            char tagStr[96];
+            snprintf(tagStr, sizeof(tagStr), "V%d: FDI SuddenStop (Ghost at 0m/s)", vehicleId);
+            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
             findHost()->getDisplayString().setTagArg("t", 1, "t");
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == 4) {
-            // DoS Flooding
+        } else if (attackType == ATTACK_DOS_FLOOD) {
+            // VeReMi dosAttack: high-frequency beacon flood (16 Hz)
             bsmPayload = "ATTACK: DoS Rapid Flood";
             findHost()->bubble(bsmPayload.c_str());
-            findHost()->getDisplayString().setTagArg("t", 0, "ATTACK: DoS Flooding");
+            char tagStr[96];
+            snprintf(tagStr, sizeof(tagStr), "V%d: DoS Flooding (16 Hz)", vehicleId);
+            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
             findHost()->getDisplayString().setTagArg("t", 1, "t");
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == 2) {
-            findHost()->getDisplayString().setTagArg("t", 0, "V3: BLACKHOLE ATTACK (Dropping)");
+        } else if (attackType == ATTACK_SYBIL_PHANTOM) {
+            // VeReMi trafficCongestionSybil: broadcast fake phantom vehicle identities
+            effectiveId = (vehicleId * 100) + (sequenceNumber % 4);
+            currentPos.x += ((sequenceNumber % 2 == 0) ? 3.0 : -3.0);
+            currentPos.y += ((sequenceNumber % 3 == 0) ? 5.5 : -5.5);
+            bsmPayload = "ATTACK: Sybil Phantom ID " + std::to_string(effectiveId);
+            findHost()->bubble(bsmPayload.c_str());
+            char tagStr[96];
+            snprintf(tagStr, sizeof(tagStr), "V%d: Sybil Phantom (ID %d)", vehicleId, effectiveId);
+            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
+        } else if (attackType == ATTACK_BLACKHOLE) {
+            // VeReMi / VANET blackhole packet drop
+            char tagStr[96];
+            snprintf(tagStr, sizeof(tagStr), "V%d: BLACKHOLE ATTACK (Dropping)", vehicleId);
+            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+            findHost()->getDisplayString().setTagArg("t", 1, "t");
+            findHost()->getDisplayString().setTagArg("t", 2, "red");
+            findHost()->getDisplayString().setTagArg("i", 1, "red");
+        } else if (attackType == ATTACK_TIME_DELAY_REPLAY) {
+            // VeReMi timeDelayAttack / dataReplay: replay stale beacon from 3 seconds ago
+            if (staleHistory.size() >= 3) {
+                const StaleBeaconData& stale = staleHistory[staleHistory.size() - 3];
+                currentPos = stale.pos;
+                currentSpd = stale.speed;
+                headingDeg = stale.heading;
+                accel = stale.accel;
+            }
+            retx = 5;
+            bsmPayload = "ATTACK: Replay Stale Packet (+3s)";
+            findHost()->bubble(bsmPayload.c_str());
+            char tagStr[96];
+            snprintf(tagStr, sizeof(tagStr), "V%d: TimeDelay/Replay (+3.0s)", vehicleId);
+            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
             findHost()->getDisplayString().setTagArg("t", 1, "t");
             findHost()->getDisplayString().setTagArg("t", 2, "red");
             findHost()->getDisplayString().setTagArg("i", 1, "red");
@@ -266,23 +444,7 @@ void EdgeTrustVehicleApp::onBSM(DemoSafetyMessage* bsm)
 
 void EdgeTrustVehicleApp::drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId)
 {
-    cModule* parent = findHost()->getParentModule();
-    if (!parent) return;
-    cCanvas* canvas = parent->getCanvas();
-    if (!canvas) return;
-
-    cLineFigure* arrow = dynamic_cast<cLineFigure*>(canvas->getFigure(arrowId.c_str()));
-    if (!arrow) {
-        arrow = new cLineFigure(arrowId.c_str());
-        arrow->setEndArrowhead(cFigure::ARROW_SIMPLE);
-        arrow->setZoomLineWidth(true);
-        canvas->addFigure(arrow);
-    }
-    arrow->setStart(cFigure::Point(from.x, from.y));
-    arrow->setEnd(cFigure::Point(to.x, to.y));
-    arrow->setLineWidth(2.5);
-    arrow->setLineColor(cFigure::Color(color.c_str()));
-    arrow->setVisible(true);
+    // Direct arrows disabled for clean, clutter-free GUI presentation
 }
 
 void EdgeTrustVehicleApp::finish()

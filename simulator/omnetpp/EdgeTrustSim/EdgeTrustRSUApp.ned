@@ -12,4 +12,5 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         string mlModel = default("adaboost"); // "adaboost" or "random_forest"
         string csvOutputPath = default("results/live_extracted_features.csv");
         string mlDataCsvPath = default("../../../../../edgetrust-ml/data/live_extracted_features.csv");
+        double maxCommunicationRange @unit(m) = default(85m);
 }

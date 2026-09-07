@@ -11,4 +11,6 @@ simple EdgeTrustVehicleApp extends DemoBaseApplLayer
         double maliciousRatio = default(0.25);
         int attackType = default(-1);
         bool isMalicious = default(false);
+        string scenarioMode = default("mixed");
+        double maxCommunicationRange @unit(m) = default(85m);
 }

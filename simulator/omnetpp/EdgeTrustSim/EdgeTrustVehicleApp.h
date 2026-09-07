@@ -5,9 +5,30 @@
 #include "veins/modules/application/edgetrust/EdgeTrustSafetyMessage_m.h"
 #include <omnetpp/ccanvas.h>
 #include <map>
+#include <deque>
 #include <string>
 
 namespace veins {
+
+// VeReMi & VANET Attack Types
+enum VeReMiAttackType {
+    ATTACK_NONE = 0,
+    ATTACK_FDI_POS_OFFSET = 1,       // VeReMi constant/random position offset (+28m)
+    ATTACK_BLACKHOLE = 2,            // VeReMi / VANET blackhole packet drop (drops 70% of beacons)
+    ATTACK_SYBIL_PHANTOM = 3,        // VeReMi traffic congestion sybil (phantom vehicle IDs)
+    ATTACK_DOS_FLOOD = 4,            // VeReMi dosAttack (high-frequency burst flooding at 16 Hz)
+    ATTACK_FDI_SUDDEN_STOP = 5,      // VeReMi suddenStop / zeroSpeedReport (freezes position & reports 0 speed while moving)
+    ATTACK_TIME_DELAY_REPLAY = 6     // VeReMi timeDelayAttack / dataReplay (artificial 3s latency & stale beacons)
+};
+
+struct StaleBeaconData {
+    simtime_t creationTime;
+    Coord pos;
+    Coord speed;
+    double heading;
+    double accel;
+    int seq;
+};
 
 class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
   public:
@@ -26,7 +47,8 @@ class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
 
     int vehicleId = 0;
     bool isMalicious = false;
-    int attackType = 0; // 0=None, 1=FDI, 2=Blackhole, 3=Sybil, 4=DoS
+    int attackType = 0;
+    std::string scenarioMode = "mixed";
     double maliciousRatio = 0.25;
     int attackStartMessage = 3; // Attack triggers after 2 to 3 message exchanges
     double maxCommunicationRange = 85.0; // Realistic 802.11p urban DSRC range (meters)
@@ -38,6 +60,13 @@ class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
     Coord lastPos;
     double lastSpeed = 0.0;
     simtime_t lastTime = SIMTIME_ZERO;
+
+    // VeReMi suddenStop state
+    bool suddenStopInitialized = false;
+    Coord suddenStopPos;
+
+    // VeReMi timeDelay / dataReplay state
+    std::deque<StaleBeaconData> staleHistory;
 
     std::map<int, bool> suspiciousNodes;
 };
