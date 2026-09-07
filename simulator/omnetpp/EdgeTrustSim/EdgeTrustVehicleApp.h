@@ -10,15 +10,25 @@
 
 namespace veins {
 
-// VeReMi & VANET Attack Types
+// VeReMi-NextGen & VANET Complete Attack Types
 enum VeReMiAttackType {
     ATTACK_NONE = 0,
-    ATTACK_FDI_POS_OFFSET = 1,       // VeReMi constant/random position offset (+28m)
-    ATTACK_BLACKHOLE = 2,            // VeReMi / VANET blackhole packet drop (drops 70% of beacons)
-    ATTACK_SYBIL_PHANTOM = 3,        // VeReMi traffic congestion sybil (phantom vehicle IDs)
-    ATTACK_DOS_FLOOD = 4,            // VeReMi dosAttack (high-frequency burst flooding at 16 Hz)
-    ATTACK_FDI_SUDDEN_STOP = 5,      // VeReMi suddenStop / zeroSpeedReport (freezes position & reports 0 speed while moving)
-    ATTACK_TIME_DELAY_REPLAY = 6     // VeReMi timeDelayAttack / dataReplay (artificial 3s latency & stale beacons)
+    ATTACK_CONST_POS_OFFSET = 1,       // 1. constantPositionOffset (+28m)
+    ATTACK_RANDOM_POS_OFFSET = 2,      // 2. randomPositionOffset (+-20m to +-70m)
+    ATTACK_POS_MIRRORING = 3,          // 3. positionMirroring (reflected across road)
+    ATTACK_CONST_SPEED_OFFSET = 4,     // 4. constantSpeedOffset (+12 m/s)
+    ATTACK_RANDOM_SPEED_OFFSET = 5,    // 5. randomSpeedOffset (+-6 m/s)
+    ATTACK_ZERO_SPEED_REPORT = 6,      // 6. zeroSpeedReport (0 m/s while moving)
+    ATTACK_SUDDEN_STOP = 7,            // 7. suddenStop (frozen position & 0 m/s)
+    ATTACK_SUDDEN_CONST_SPEED = 8,     // 8. suddenConstantSpeed (speed frozen at trigger value)
+    ATTACK_REVERSED_HEADING = 9,       // 9. reversedHeading (heading + 180 deg)
+    ATTACK_FEIGNED_BRAKING = 10,       // 10. feignedBraking (negative accel reported while accelerating)
+    ATTACK_ACCEL_MULT = 11,            // 11. accelerationMultiplication (accel * 3)
+    ATTACK_DOS_FLOOD = 12,             // 12. dosAttack (burst flooding at 16 Hz)
+    ATTACK_SYBIL_PHANTOM = 13,         // 13. trafficCongestionSybil (phantom IDs with jitter)
+    ATTACK_DATA_REPLAY = 14,           // 14. dataReplay (replaying stale packet from history)
+    ATTACK_TIME_DELAY = 15,            // 15. timeDelayAttack (+3.0s latency offset)
+    ATTACK_BLACKHOLE = 16              // 16. blackhole (selective 70% packet dropping)
 };
 
 struct StaleBeaconData {
@@ -64,6 +74,10 @@ class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
     // VeReMi suddenStop state
     bool suddenStopInitialized = false;
     Coord suddenStopPos;
+
+    // VeReMi suddenConstantSpeed state
+    bool constSpeedInitialized = false;
+    double frozenSpeed = 0.0;
 
     // VeReMi timeDelay / dataReplay state
     std::deque<StaleBeaconData> staleHistory;

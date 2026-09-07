@@ -7,6 +7,26 @@ namespace veins {
 
 Define_Module(veins::EdgeTrustVehicleApp);
 
+static int parseScenarioAttackType(const std::string& mode) {
+    if (mode == "constant_pos_offset" || mode == "fdi_position") return ATTACK_CONST_POS_OFFSET;
+    if (mode == "random_pos_offset") return ATTACK_RANDOM_POS_OFFSET;
+    if (mode == "pos_mirroring" || mode == "position_mirroring") return ATTACK_POS_MIRRORING;
+    if (mode == "constant_speed_offset") return ATTACK_CONST_SPEED_OFFSET;
+    if (mode == "random_speed_offset") return ATTACK_RANDOM_SPEED_OFFSET;
+    if (mode == "zero_speed_report") return ATTACK_ZERO_SPEED_REPORT;
+    if (mode == "sudden_stop" || mode == "fdi_suddenstop") return ATTACK_SUDDEN_STOP;
+    if (mode == "sudden_const_speed" || mode == "sudden_constant_speed") return ATTACK_SUDDEN_CONST_SPEED;
+    if (mode == "reversed_heading") return ATTACK_REVERSED_HEADING;
+    if (mode == "feigned_braking") return ATTACK_FEIGNED_BRAKING;
+    if (mode == "accel_mult" || mode == "acceleration_multiplication") return ATTACK_ACCEL_MULT;
+    if (mode == "dos" || mode == "dos_attack") return ATTACK_DOS_FLOOD;
+    if (mode == "sybil" || mode == "traffic_congestion_sybil") return ATTACK_SYBIL_PHANTOM;
+    if (mode == "data_replay") return ATTACK_DATA_REPLAY;
+    if (mode == "time_delay" || mode == "timedelay" || mode == "time_delay_attack") return ATTACK_TIME_DELAY;
+    if (mode == "blackhole") return ATTACK_BLACKHOLE;
+    return ATTACK_NONE;
+}
+
 void EdgeTrustVehicleApp::initialize(int stage)
 {
     DemoBaseApplLayer::initialize(stage);
@@ -17,137 +37,81 @@ void EdgeTrustVehicleApp::initialize(int stage)
         maliciousRatio = hasPar("maliciousRatio") ? par("maliciousRatio").doubleValue() : 0.25;
         maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
 
-        // Configure attack profiles based on scenarioMode
+        int singleAttack = parseScenarioAttackType(scenarioMode);
+
+        // Configure attack assignment based on scenarioMode
         if (scenarioMode == "baseline") {
             // All vehicles legitimate
             isMalicious = false;
             attackType = ATTACK_NONE;
             attackStartMessage = 9999;
-        } else if (scenarioMode == "fdi_position") {
-            // VeReMi constant/random position offset scenario
+        } else if (singleAttack != ATTACK_NONE) {
+            // Dedicated single-attack scenario
             if (vehicleId == 1) {
                 isMalicious = false;
                 attackType = ATTACK_NONE;
                 attackStartMessage = 9999;
             } else if (vehicleId == 2) {
                 isMalicious = true;
-                attackType = ATTACK_FDI_POS_OFFSET;
+                attackType = singleAttack;
                 attackStartMessage = 3;
             } else {
                 isMalicious = ((vehicleId % 3) == 0);
-                attackType = isMalicious ? ATTACK_FDI_POS_OFFSET : ATTACK_NONE;
+                attackType = isMalicious ? singleAttack : ATTACK_NONE;
                 attackStartMessage = 3;
             }
-        } else if (scenarioMode == "fdi_suddenstop") {
-            // VeReMi sudden stop & zero speed report scenario
+        } else if (scenarioMode == "mix_three") {
+            // VeReMi mixThree: constantPositionOffset, randomSpeedOffset, suddenStop
+            static const int mix3[3] = { ATTACK_CONST_POS_OFFSET, ATTACK_RANDOM_SPEED_OFFSET, ATTACK_SUDDEN_STOP };
             if (vehicleId == 1) {
                 isMalicious = false;
                 attackType = ATTACK_NONE;
                 attackStartMessage = 9999;
-            } else if (vehicleId == 2) {
-                isMalicious = true;
-                attackType = ATTACK_FDI_SUDDEN_STOP;
-                attackStartMessage = 3;
             } else {
-                isMalicious = ((vehicleId % 3) == 0);
-                attackType = isMalicious ? ATTACK_FDI_SUDDEN_STOP : ATTACK_NONE;
-                attackStartMessage = 3;
-            }
-        } else if (scenarioMode == "dos") {
-            // VeReMi DoS high-rate flooding scenario
-            if (vehicleId == 1) {
-                isMalicious = false;
-                attackType = ATTACK_NONE;
-                attackStartMessage = 9999;
-            } else if (vehicleId == 2) {
-                isMalicious = true;
-                attackType = ATTACK_DOS_FLOOD;
-                attackStartMessage = 3;
-            } else {
-                isMalicious = ((vehicleId % 3) == 0);
-                attackType = isMalicious ? ATTACK_DOS_FLOOD : ATTACK_NONE;
-                attackStartMessage = 3;
-            }
-        } else if (scenarioMode == "sybil") {
-            // VeReMi Sybil phantom congestion scenario
-            if (vehicleId == 1) {
-                isMalicious = false;
-                attackType = ATTACK_NONE;
-                attackStartMessage = 9999;
-            } else if (vehicleId == 2) {
-                isMalicious = true;
-                attackType = ATTACK_SYBIL_PHANTOM;
-                attackStartMessage = 3;
-            } else {
-                isMalicious = ((vehicleId % 3) == 0);
-                attackType = isMalicious ? ATTACK_SYBIL_PHANTOM : ATTACK_NONE;
-                attackStartMessage = 3;
-            }
-        } else if (scenarioMode == "blackhole") {
-            // Blackhole selective beacon dropping scenario
-            if (vehicleId == 1) {
-                isMalicious = false;
-                attackType = ATTACK_NONE;
-                attackStartMessage = 9999;
-            } else if (vehicleId == 2) {
-                isMalicious = true;
-                attackType = ATTACK_BLACKHOLE;
-                attackStartMessage = 3;
-            } else {
-                isMalicious = ((vehicleId % 3) == 0);
-                attackType = isMalicious ? ATTACK_BLACKHOLE : ATTACK_NONE;
-                attackStartMessage = 3;
-            }
-        } else if (scenarioMode == "timedelay") {
-            // VeReMi time delay & stale message replay scenario
-            if (vehicleId == 1) {
-                isMalicious = false;
-                attackType = ATTACK_NONE;
-                attackStartMessage = 9999;
-            } else if (vehicleId == 2) {
-                isMalicious = true;
-                attackType = ATTACK_TIME_DELAY_REPLAY;
-                attackStartMessage = 3;
-            } else {
-                isMalicious = ((vehicleId % 3) == 0);
-                attackType = isMalicious ? ATTACK_TIME_DELAY_REPLAY : ATTACK_NONE;
-                attackStartMessage = 3;
+                unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
+                if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
+                    isMalicious = true;
+                    attackType = mix3[(vehicleId - 2) % 3];
+                    attackStartMessage = 3;
+                } else {
+                    isMalicious = false;
+                    attackType = ATTACK_NONE;
+                    attackStartMessage = 9999;
+                }
             }
         } else {
-            // "mixed" mode (VeReMi mixAll / mixThree): heterogeneous attacks across vehicles
+            // "mix_all" or "mixed" (default): iterates across ALL 16 attacks!
+            static const int allAttacks[16] = {
+                ATTACK_CONST_POS_OFFSET,
+                ATTACK_RANDOM_POS_OFFSET,
+                ATTACK_POS_MIRRORING,
+                ATTACK_CONST_SPEED_OFFSET,
+                ATTACK_RANDOM_SPEED_OFFSET,
+                ATTACK_ZERO_SPEED_REPORT,
+                ATTACK_SUDDEN_STOP,
+                ATTACK_SUDDEN_CONST_SPEED,
+                ATTACK_REVERSED_HEADING,
+                ATTACK_FEIGNED_BRAKING,
+                ATTACK_ACCEL_MULT,
+                ATTACK_DOS_FLOOD,
+                ATTACK_SYBIL_PHANTOM,
+                ATTACK_DATA_REPLAY,
+                ATTACK_TIME_DELAY,
+                ATTACK_BLACKHOLE
+            };
             if (vehicleId == 1) {
                 isMalicious = false;
                 attackType = ATTACK_NONE;
                 attackStartMessage = 9999;
-            } else if (vehicleId == 2) {
+            } else if (vehicleId >= 2 && vehicleId <= 17) {
                 isMalicious = true;
-                attackType = ATTACK_FDI_POS_OFFSET;
-                attackStartMessage = 3;
-            } else if (vehicleId == 3) {
-                isMalicious = true;
-                attackType = ATTACK_BLACKHOLE;
-                attackStartMessage = 3;
-            } else if (vehicleId == 4) {
-                isMalicious = true;
-                attackType = ATTACK_DOS_FLOOD;
-                attackStartMessage = 3;
-            } else if (vehicleId == 5) {
-                isMalicious = true;
-                attackType = ATTACK_SYBIL_PHANTOM;
-                attackStartMessage = 3;
-            } else if (vehicleId == 6) {
-                isMalicious = true;
-                attackType = ATTACK_FDI_SUDDEN_STOP;
-                attackStartMessage = 3;
-            } else if (vehicleId == 7) {
-                isMalicious = true;
-                attackType = ATTACK_TIME_DELAY_REPLAY;
+                attackType = allAttacks[vehicleId - 2];
                 attackStartMessage = 3;
             } else {
                 unsigned int hashVal = ((unsigned int)vehicleId * 2654435761u) % 100;
                 if (maliciousRatio > 0.0 && hashVal < (unsigned int)(maliciousRatio * 100)) {
                     isMalicious = true;
-                    attackType = (vehicleId % 6) + 1;
+                    attackType = allAttacks[(vehicleId - 2) % 16];
                     attackStartMessage = 3;
                 } else {
                     isMalicious = false;
@@ -196,8 +160,8 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
             findHost()->getDisplayString().setTagArg("i", 1, "red");
             EV_DEBUG << "Vehicle " << vehicleId << " [Blackhole] dropped its own beacon." << endl;
         } else {
-            // VeReMi Time Delay / Replay: artificially delay timestamp
-            if (attackActive && attackType == ATTACK_TIME_DELAY_REPLAY) {
+            // VeReMi Time Delay / Data Replay: artificially delay timestamp
+            if (attackActive && (attackType == ATTACK_TIME_DELAY || attackType == ATTACK_DATA_REPLAY)) {
                 bsm->setTimestamp(simTime() - simtime_t(3.0));
             }
             sendDown(bsm);
@@ -273,90 +237,190 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     int retx = (isMalicious && attackType == ATTACK_BLACKHOLE) ? (4 + (rand() % 6)) : (rand() % 3);
     bool attackActive = (isMalicious && sequenceNumber >= attackStartMessage);
 
-    // ── Simulate VeReMi-NextGen Attack Scenarios ──
+    // ── Simulate VeReMi-NextGen Complete Attack Catalog ──
     std::string bsmPayload;
     if (attackActive) {
-        if (attackType == ATTACK_FDI_POS_OFFSET) {
-            // VeReMi constant/random position offset: spoof position by ~28m
-            currentPos.x += ((vehicleId % 2 == 0) ? 28.0 : -28.0);
-            currentPos.y += ((vehicleId % 3 == 0) ? 22.0 : -22.0);
-            currentSpd = Coord(0, 0, 0); // Fake collision / stopped vehicle
-            bsmPayload = "ATTACK: FDI Fake Crash (+28m)";
-            findHost()->bubble(bsmPayload.c_str());
-            char tagStr[96];
-            snprintf(tagStr, sizeof(tagStr), "V%d: FDI ATTACK (Spoofed +28m)", vehicleId);
-            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
-            findHost()->getDisplayString().setTagArg("t", 1, "t");
-            findHost()->getDisplayString().setTagArg("t", 2, "red");
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == ATTACK_FDI_SUDDEN_STOP) {
-            // VeReMi suddenStop / zeroSpeedReport: freeze position & report 0 speed while moving with feigned emergency braking
-            if (!suddenStopInitialized) {
-                suddenStopPos = curPosition;
-                suddenStopInitialized = true;
+        switch (attackType) {
+            case ATTACK_CONST_POS_OFFSET: {
+                currentPos.x += ((vehicleId % 2 == 0) ? 28.0 : -28.0);
+                currentPos.y += ((vehicleId % 3 == 0) ? 22.0 : -22.0);
+                currentSpd = Coord(0, 0, 0);
+                bsmPayload = "ATTACK: ConstPosOffset (+28m)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: ConstPosOffset (+28m)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
             }
-            currentPos = suddenStopPos;
-            currentSpd = Coord(0, 0, 0);
-            spdMag = 0.0;
-            accel = -9.2; // VeReMi feigned hard braking / zero speed report
-            bsmPayload = "ATTACK: SuddenStop / ZeroSpeed";
-            findHost()->bubble(bsmPayload.c_str());
-            char tagStr[96];
-            snprintf(tagStr, sizeof(tagStr), "V%d: FDI SuddenStop (Ghost at 0m/s)", vehicleId);
-            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
-            findHost()->getDisplayString().setTagArg("t", 1, "t");
-            findHost()->getDisplayString().setTagArg("t", 2, "red");
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == ATTACK_DOS_FLOOD) {
-            // VeReMi dosAttack: high-frequency beacon flood (16 Hz)
-            bsmPayload = "ATTACK: DoS Rapid Flood";
-            findHost()->bubble(bsmPayload.c_str());
-            char tagStr[96];
-            snprintf(tagStr, sizeof(tagStr), "V%d: DoS Flooding (16 Hz)", vehicleId);
-            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
-            findHost()->getDisplayString().setTagArg("t", 1, "t");
-            findHost()->getDisplayString().setTagArg("t", 2, "red");
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == ATTACK_SYBIL_PHANTOM) {
-            // VeReMi trafficCongestionSybil: broadcast fake phantom vehicle identities
-            effectiveId = (vehicleId * 100) + (sequenceNumber % 4);
-            currentPos.x += ((sequenceNumber % 2 == 0) ? 3.0 : -3.0);
-            currentPos.y += ((sequenceNumber % 3 == 0) ? 5.5 : -5.5);
-            bsmPayload = "ATTACK: Sybil Phantom ID " + std::to_string(effectiveId);
-            findHost()->bubble(bsmPayload.c_str());
-            char tagStr[96];
-            snprintf(tagStr, sizeof(tagStr), "V%d: Sybil Phantom (ID %d)", vehicleId, effectiveId);
-            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
-            findHost()->getDisplayString().setTagArg("t", 1, "t");
-            findHost()->getDisplayString().setTagArg("t", 2, "red");
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == ATTACK_BLACKHOLE) {
-            // VeReMi / VANET blackhole packet drop
-            char tagStr[96];
-            snprintf(tagStr, sizeof(tagStr), "V%d: BLACKHOLE ATTACK (Dropping)", vehicleId);
-            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
-            findHost()->getDisplayString().setTagArg("t", 1, "t");
-            findHost()->getDisplayString().setTagArg("t", 2, "red");
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
-        } else if (attackType == ATTACK_TIME_DELAY_REPLAY) {
-            // VeReMi timeDelayAttack / dataReplay: replay stale beacon from 3 seconds ago
-            if (staleHistory.size() >= 3) {
-                const StaleBeaconData& stale = staleHistory[staleHistory.size() - 3];
-                currentPos = stale.pos;
-                currentSpd = stale.speed;
-                headingDeg = stale.heading;
-                accel = stale.accel;
+            case ATTACK_RANDOM_POS_OFFSET: {
+                double rX = ((rand() % 2 == 0 ? 1.0 : -1.0) * (20.0 + (rand() % 50)));
+                double rY = ((rand() % 2 == 0 ? 1.0 : -1.0) * (20.0 + (rand() % 50)));
+                currentPos.x += rX; currentPos.y += rY;
+                bsmPayload = "ATTACK: RandomPosOffset (+-50m)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: RandomPosOffset (+-50m)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
             }
-            retx = 5;
-            bsmPayload = "ATTACK: Replay Stale Packet (+3s)";
-            findHost()->bubble(bsmPayload.c_str());
-            char tagStr[96];
-            snprintf(tagStr, sizeof(tagStr), "V%d: TimeDelay/Replay (+3.0s)", vehicleId);
-            findHost()->getDisplayString().setTagArg("t", 0, tagStr);
-            findHost()->getDisplayString().setTagArg("t", 1, "t");
-            findHost()->getDisplayString().setTagArg("t", 2, "red");
-            findHost()->getDisplayString().setTagArg("i", 1, "red");
+            case ATTACK_POS_MIRRORING: {
+                double perpRad = (headingDeg - 90.0) * M_PI / 180.0;
+                currentPos.x += std::cos(perpRad) * 16.0;
+                currentPos.y += std::sin(perpRad) * 16.0;
+                bsmPayload = "ATTACK: PosMirroring (Opposite Lane)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: PosMirroring (+16m Perp)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_CONST_SPEED_OFFSET: {
+                spdMag += 12.0;
+                currentSpd = Coord(headingVec.x * spdMag, headingVec.y * spdMag, 0);
+                bsmPayload = "ATTACK: ConstSpeedOffset (+12m/s)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: ConstSpeedOffset (+12m/s)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_RANDOM_SPEED_OFFSET: {
+                double rSpd = (rand() % 2 == 0 ? 1.0 : -1.0) * (4.0 + (rand() % 5));
+                spdMag = std::max(0.0, spdMag + rSpd);
+                currentSpd = Coord(headingVec.x * spdMag, headingVec.y * spdMag, 0);
+                bsmPayload = "ATTACK: RandomSpeedOffset (+-6m/s)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: RandomSpeedOffset", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_ZERO_SPEED_REPORT: {
+                currentSpd = Coord(0, 0, 0);
+                spdMag = 0.0;
+                bsmPayload = "ATTACK: ZeroSpeedReport (Reports 0m/s)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: ZeroSpeedReport (0m/s)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_SUDDEN_STOP: {
+                if (!suddenStopInitialized) {
+                    suddenStopPos = curPosition;
+                    suddenStopInitialized = true;
+                }
+                currentPos = suddenStopPos;
+                currentSpd = Coord(0, 0, 0);
+                spdMag = 0.0;
+                accel = -9.2;
+                bsmPayload = "ATTACK: SuddenStop (Ghost at 0m/s)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: SuddenStop (Ghost 0m/s)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_SUDDEN_CONST_SPEED: {
+                if (!constSpeedInitialized) {
+                    frozenSpeed = spdMag > 1.0 ? spdMag : 14.0;
+                    constSpeedInitialized = true;
+                }
+                spdMag = frozenSpeed;
+                currentSpd = Coord(headingVec.x * spdMag, headingVec.y * spdMag, 0);
+                accel = 0.0;
+                bsmPayload = "ATTACK: SuddenConstSpeed (Frozen Speed)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: SuddenConstSpeed (%.1fm/s)", vehicleId, frozenSpeed);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_REVERSED_HEADING: {
+                headingDeg = std::fmod(headingDeg + 180.0, 360.0);
+                bsmPayload = "ATTACK: ReversedHeading (+180 deg)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: ReversedHeading (Opposite)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_FEIGNED_BRAKING: {
+                accel = (accel > 0.0 ? -1.0 : 1.0) * (std::abs(accel) * 2.5 + 4.5);
+                accel = std::max(-9.5, std::min(6.0, accel));
+                bsmPayload = "ATTACK: FeignedBraking (False Decel)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: FeignedBraking (%.1fm/s2)", vehicleId, accel);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_ACCEL_MULT: {
+                accel = (accel >= 0.0 ? 1.0 : -1.0) * (std::max(1.5, std::abs(accel)) * 3.5);
+                accel = std::max(-12.0, std::min(10.0, accel));
+                bsmPayload = "ATTACK: AccelMultiplication (3.5x)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: AccelMult (%.1fm/s2)", vehicleId, accel);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_DOS_FLOOD: {
+                bsmPayload = "ATTACK: DoS Rapid Flood";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: DoS Flooding (16 Hz)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_SYBIL_PHANTOM: {
+                effectiveId = (vehicleId * 100) + (sequenceNumber % 4);
+                currentPos.x += ((sequenceNumber % 2 == 0) ? 3.0 : -3.0);
+                currentPos.y += ((sequenceNumber % 3 == 0) ? 5.5 : -5.5);
+                bsmPayload = "ATTACK: Sybil Phantom ID " + std::to_string(effectiveId);
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: Sybil Phantom (ID %d)", vehicleId, effectiveId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_DATA_REPLAY: {
+                if (staleHistory.size() >= 3) {
+                    const StaleBeaconData& stale = staleHistory[staleHistory.size() - 3];
+                    currentPos = stale.pos;
+                    currentSpd = stale.speed;
+                    headingDeg = stale.heading;
+                    accel = stale.accel;
+                }
+                retx = 5;
+                bsmPayload = "ATTACK: DataReplay (Stale Packet)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: DataReplay (+3.0s Delay)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_TIME_DELAY: {
+                retx = 4;
+                bsmPayload = "ATTACK: TimeDelay (+3.0s Delay)";
+                findHost()->bubble(bsmPayload.c_str());
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: TimeDelay (+3.0s)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            case ATTACK_BLACKHOLE: {
+                char tagStr[96];
+                snprintf(tagStr, sizeof(tagStr), "V%d: BLACKHOLE ATTACK (Dropping)", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                break;
+            }
+            default:
+                break;
         }
+        findHost()->getDisplayString().setTagArg("t", 1, "t");
+        findHost()->getDisplayString().setTagArg("t", 2, "red");
+        findHost()->getDisplayString().setTagArg("i", 1, "red");
     } else {
         // Legitimate vehicle or pre-attack stage: persistent status badge + bubble
         char tagStr[96];

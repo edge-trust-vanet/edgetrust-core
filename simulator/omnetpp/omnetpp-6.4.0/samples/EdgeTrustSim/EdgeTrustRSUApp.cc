@@ -206,12 +206,26 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
 
     // VeReMi suddenStop / zeroSpeedReport anomaly (impossible deceleration or sudden freeze while at speed)
     double accelDiscrepancy = std::abs(reportedAccel - calcAccel);
-    if (reportedAccel < -8.0 || accelDiscrepancy > 5.0 || (calcAccel < -8.0 && rec.lastSpeed > 4.0) ||
-        (reportedSpeed == 0.0 && rec.lastSpeed > 5.0 && distanceMoved < 0.5)) {
+    if (reportedAccel < -8.0 || reportedAccel > 6.0 || accelDiscrepancy > 5.0 || (calcAccel < -8.0 && rec.lastSpeed > 4.0) ||
+        (reportedSpeed == 0.0 && rec.lastSpeed > 5.0 && distanceMoved < 0.5) ||
+        (reportedSpeed == 0.0 && calculatedSpeed > 3.0)) {
         plausibility = 0.02;
         consistency = 0.05;
         rec.falsePacketInjection++;
     }
+
+    // VeReMi reversedHeading check (reported heading opposite to actual trajectory vector)
+    if (calculatedSpeed > 3.0 && dtSec > 0.0) {
+        double motionHeading = std::fmod(std::atan2(reportedPos.y - rec.lastPos.y, reportedPos.x - rec.lastPos.x) * 180.0 / M_PI + 360.0, 360.0);
+        double hDiff = std::abs(headingDeg - motionHeading);
+        if (hDiff > 180.0) hDiff = 360.0 - hDiff;
+        if (hDiff > 120.0) {
+            consistency = 0.05;
+            plausibility = 0.05;
+            rec.falsePacketInjection++;
+        }
+    }
+
     if (rec.falsePacketInjection > 0) {
         consistency = std::min(consistency, 0.06);
     }
