@@ -160,27 +160,33 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
 
         // OBU Local Heuristic Firewall (when heuristic filtering mode is active)
         if (enableOBUHeuristicFilter && attackActive) {
-            std::string violationReason;
-            bool passed = evaluateOBUOutgoingHeuristics(bsm, violationReason);
+            HeuristicViolationReport report;
+            bool passed = evaluateOBUOutgoingHeuristics(bsm, report);
             if (!passed) {
                 totalPacketsDropped++;
                 totalHeuristicFiltered++;
                 delete bsm;
 
-                char tagStr[140];
-                snprintf(tagStr, sizeof(tagStr), "V%d: [OBU HEURISTIC BLOCKED] Dropped locally!", vehicleId);
+                char tagStr[160];
+                snprintf(tagStr, sizeof(tagStr), "V%d: [OBU BLOCKED] %s", vehicleId, report.shortBadgeSummary.c_str());
                 findHost()->getDisplayString().setTagArg("t", 0, tagStr);
                 findHost()->getDisplayString().setTagArg("t", 1, "t");
                 findHost()->getDisplayString().setTagArg("t", 2, "red");
                 findHost()->getDisplayString().setTagArg("i", 1, "red");
 
-                findHost()->bubble("OBU: Heuristic Blocked (Not sent to RSU!)");
+                char bubbleStr[128];
+                snprintf(bubbleStr, sizeof(bubbleStr), "OBU Filter: %s (Dropped!)", report.shortBadgeSummary.c_str());
+                findHost()->bubble(bubbleStr);
 
                 EV_INFO << "============================================================" << endl;
                 EV_INFO << " [t=" << simTime() << "s] [OBU HEURISTIC FILTER] Vehicle " << vehicleId
                         << " BLOCKED Outgoing BSM!" << endl;
-                EV_INFO << "   -> Kinematic Failure: " << violationReason << endl;
-                EV_INFO << "   -> Local OBU Action: DROPPED AT VEHICLE. 0% sent to RSU." << endl;
+                EV_INFO << "   -> Heuristic Violated:     " << report.ruleName << endl;
+                EV_INFO << "   -> Physical Ground Truth:  " << report.groundTruth << endl;
+                EV_INFO << "   -> Spoofed BSM Payload:    " << report.spoofedData << endl;
+                EV_INFO << "   -> Discrepancy Analysis:   " << report.discrepancy << endl;
+                EV_INFO << "   -> Attack Pattern:         " << report.attackIdentified << endl;
+                EV_INFO << "   -> Local OBU Action:       DROPPED AT VEHICLE. 0% sent to RSU." << endl;
                 EV_INFO << "============================================================" << endl;
 
                 simtime_t nextInterval = (attackType == ATTACK_DOS_FLOOD) ? simtime_t(0.06) : beaconInterval;
@@ -498,7 +504,7 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     bsm->setAttackType(attackActive ? attackType : 0);
 }
 
-bool EdgeTrustVehicleApp::evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* bsm, std::string& outViolationReason)
+bool EdgeTrustVehicleApp::evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* bsm, HeuristicViolationReport& report)
 {
     if (!bsm) return true;
 
@@ -519,69 +525,124 @@ bool EdgeTrustVehicleApp::evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* 
         canBusSpeed = curSpeed.length();
     }
 
+    char buf[256];
+
     // 1. Plausibility Check: Urban Speed Limits (0 - 45 m/s)
     if (reportedSpeed < 0.0 || reportedSpeed > 45.0) {
-        outViolationReason = "Speed Plausibility Failure (" + std::to_string((int)reportedSpeed) + " m/s exceeds urban max 45 m/s)";
+        report.ruleName = "[Rule 1: Kinematic Plausibility - Maximum Urban Road Speed]";
+        report.groundTruth = "Urban road maximum physical speed limit = 45.0 m/s (162 km/h)";
+        snprintf(buf, sizeof(buf), "BSM claims Speed = %.1f m/s (%.1f km/h)", reportedSpeed, reportedSpeed * 3.6);
+        report.spoofedData = buf;
+        snprintf(buf, sizeof(buf), "Reported speed (%.1f m/s) exceeds maximum possible velocity for urban street profile!", reportedSpeed);
+        report.discrepancy = buf;
+        report.attackIdentified = "Extreme Speed Spoofing (Speed Bound Attack)";
+        report.shortBadgeSummary = "Speed Limit Exceeded";
         return false;
     }
 
     // 2. Physical Acceleration Bounds (-8.5 to 6.0 m/s^2)
     if (accel < -8.5 || accel > 6.0) {
-        outViolationReason = "Kinematic Acceleration Bound Exceeded (" + std::to_string(accel) + " m/s^2 outside [-8.5, 6.0])";
+        report.ruleName = "[Rule 2: Kinematic Limits - Tire-Road Friction Acceleration Bounds]";
+        report.groundTruth = "Physical asphalt tire-road friction acceleration range = [-8.5, +6.0] m/s^2";
+        snprintf(buf, sizeof(buf), "BSM claims Acceleration = %.2f m/s^2", accel);
+        report.spoofedData = buf;
+        snprintf(buf, sizeof(buf), "Reported acceleration (%.2f m/s^2) violates vehicle physical braking/engine limits!", accel);
+        report.discrepancy = buf;
+        report.attackIdentified = "Feigned Braking / Acceleration Multiplication Attack";
+        report.shortBadgeSummary = "Friction Accel Limit Exceeded";
         return false;
     }
 
     // 3. Sensor Consistency: Internal CAN-Bus Speedometer vs BSM Speed
     if (std::abs(reportedSpeed - canBusSpeed) > 4.5) {
-        outViolationReason = "CAN-Bus vs BSM Speed Discrepancy (CAN: " +
-                             std::to_string((int)canBusSpeed) + " m/s vs BSM: " +
-                             std::to_string((int)reportedSpeed) + " m/s)";
+        report.ruleName = "[Rule 3: Sensor Cross-Validation - CAN-Bus Speedometer vs BSM Speed]";
+        snprintf(buf, sizeof(buf), "Internal CAN-Bus Wheel Speedometer = %.1f m/s (%.1f km/h)", canBusSpeed, canBusSpeed * 3.6);
+        report.groundTruth = buf;
+        snprintf(buf, sizeof(buf), "BSM claims Speed = %.1f m/s (%.1f km/h)", reportedSpeed, reportedSpeed * 3.6);
+        report.spoofedData = buf;
+        snprintf(buf, sizeof(buf), "|BSM (%.1f m/s) - CAN (%.1f m/s)| = %.1f m/s discrepancy exceeds 4.5 m/s sensor tolerance!",
+                 reportedSpeed, canBusSpeed, std::abs(reportedSpeed - canBusSpeed));
+        report.discrepancy = buf;
+        report.attackIdentified = (reportedSpeed < 0.5) ? "Zero-Speed Report / Motion Concealment Attack" : "Speed Spoofing / Speed Offset Attack";
+        snprintf(buf, sizeof(buf), "CAN vs BSM Speed: |%.1f - %.1f|m/s", canBusSpeed, reportedSpeed);
+        report.shortBadgeSummary = buf;
         return false;
     }
 
     // 4. Ghost Sudden Stop Anomaly
     if (reportedSpeed < 0.5 && accel <= -8.0 && canBusSpeed > 2.5) {
-        outViolationReason = "Ghost Sudden Stop Anomaly (CAN: " +
-                             std::to_string((int)canBusSpeed) + " m/s vs BSM: 0 m/s with -9.2 m/s^2)";
+        report.ruleName = "[Rule 4: Kinematic Sanity - Ghost Sudden Stop Anomaly]";
+        snprintf(buf, sizeof(buf), "Vehicle is actively in motion at %.1f m/s (%.1f km/h) on CAN-bus", canBusSpeed, canBusSpeed * 3.6);
+        report.groundTruth = buf;
+        snprintf(buf, sizeof(buf), "BSM claims Speed = 0.0 m/s with Emergency Deceleration = %.1f m/s^2", accel);
+        report.spoofedData = buf;
+        snprintf(buf, sizeof(buf), "Direct contradiction: Vehicle is rolling at %.1f m/s while broadcasting a phantom crash stop!", canBusSpeed);
+        report.discrepancy = buf;
+        report.attackIdentified = "Ghost Sudden Stop Attack";
+        report.shortBadgeSummary = "Ghost Sudden Stop";
         return false;
     }
 
-    // 5. Position Jump & Implied Speed Check
+    // 5. Position Jump & Implied Speed Check vs CAN-Bus Odometry
     if (lastTransmittedTime > SIMTIME_ZERO) {
         simtime_t dt = simTime() - lastTransmittedTime;
         if (dt.dbl() > 0.001 && dt.dbl() < 3.0) {
             double displacement = lastTransmittedPos.distance(bsmPos);
             double maxAllowedDisplacement = (std::max(canBusSpeed, reportedSpeed) * dt.dbl()) + 8.0;
             if (displacement > maxAllowedDisplacement || (displacement / dt.dbl()) > 45.0) {
-                outViolationReason = "Kinematic Position Jump (Displacement: " +
-                                     std::to_string((int)displacement) + " m in " +
-                                     std::to_string(dt.dbl()) + "s, Implied: " +
-                                     std::to_string((int)(displacement / dt.dbl())) + " m/s)";
-                return false;
-            }
-            if (reportedSpeed < 0.5 && displacement > 4.0) {
-                outViolationReason = "Zero-Speed Displacement Contradiction (Speed=0 m/s but moved " +
-                                     std::to_string((int)displacement) + " m)";
+                report.ruleName = "[Rule 5: Kinematic Position Displacement vs CAN-Bus Odometry]";
+                snprintf(buf, sizeof(buf), "CAN-Bus Speed = %.1f m/s (Max Allowed Travel: %.1f m in %.2fs)",
+                         canBusSpeed, maxAllowedDisplacement, dt.dbl());
+                report.groundTruth = buf;
+                snprintf(buf, sizeof(buf), "BSM Coordinates Displaced by %.1f m (Implied Velocity: %.1f m/s)",
+                         displacement, displacement / dt.dbl());
+                report.spoofedData = buf;
+                snprintf(buf, sizeof(buf), "+%.1f m coordinate jump exceeds odometer-predicted maximum travel (%.1f m) in %.2fs!",
+                         displacement - maxAllowedDisplacement, maxAllowedDisplacement, dt.dbl());
+                report.discrepancy = buf;
+                report.attackIdentified = "Position Spoofing (Position Mirroring / Constant Position Offset)";
+                snprintf(buf, sizeof(buf), "Pos Jump: +%.1fm vs CAN", displacement - maxAllowedDisplacement);
+                report.shortBadgeSummary = buf;
                 return false;
             }
 
-            // 6. Heading vs Vector Motion Angle Check
+            // 6. Zero-Speed Displacement Contradiction
+            if (reportedSpeed < 0.5 && displacement > 4.0) {
+                report.ruleName = "[Rule 6: Physical Motion Contradiction - Zero Speed with Coordinate Jump]";
+                report.groundTruth = "BSM payload declares Vehicle is Completely Stationary (Speed = 0.0 m/s)";
+                snprintf(buf, sizeof(buf), "Reported Coordinates Shifted by %.1f m in %.2fs", displacement, dt.dbl());
+                report.spoofedData = buf;
+                snprintf(buf, sizeof(buf), "Physical impossibility: Vehicle shifted position by %.1f m while broadcasting 0 m/s velocity!", displacement);
+                report.discrepancy = buf;
+                report.attackIdentified = "Zero-Speed Displacement Contradiction";
+                report.shortBadgeSummary = "Stationary Coordinate Shift";
+                return false;
+            }
+
+            // 7. Heading Vector vs Trajectory Angle Check
             if (displacement > 1.5 && canBusSpeed > 1.5) {
                 double motionAngle = std::fmod(std::atan2(bsmPos.y - lastTransmittedPos.y, bsmPos.x - lastTransmittedPos.x) * 180.0 / M_PI + 360.0, 360.0);
                 double hDiff = std::abs(heading - motionAngle);
                 if (hDiff > 180.0) hDiff = 360.0 - hDiff;
                 if (hDiff > 95.0) {
-                    outViolationReason = "Heading Vector Inconsistency (Heading: " +
-                                         std::to_string((int)heading) + " deg vs Motion Vector: " +
-                                         std::to_string((int)motionAngle) + " deg, diff: " +
-                                         std::to_string((int)hDiff) + " deg)";
+                    report.ruleName = "[Rule 7: Trajectory Motion Vector vs Reported Compass Heading]";
+                    snprintf(buf, sizeof(buf), "Actual Trajectory Displacement Angle = %.1f deg", motionAngle);
+                    report.groundTruth = buf;
+                    snprintf(buf, sizeof(buf), "BSM claims Compass Heading = %.1f deg", heading);
+                    report.spoofedData = buf;
+                    snprintf(buf, sizeof(buf), "Angular deviation |%.1f deg - %.1f deg| = %.1f deg exceeds 95.0 deg consistency threshold!",
+                             heading, motionAngle, hDiff);
+                    report.discrepancy = buf;
+                    report.attackIdentified = "Reversed Heading / Direction Spoofing Attack";
+                    snprintf(buf, sizeof(buf), "Heading Mismatch: %.0f deg", hDiff);
+                    report.shortBadgeSummary = buf;
                     return false;
                 }
             }
         }
     }
 
-    // 7. Rate Anomaly / Flooding Burst Detection
+    // 8. Rate Anomaly / Flooding Burst Detection
     if (simTime() - obuSecondWindowStart < 1.0) {
         obuBsmCountInLastSecond++;
     } else {
@@ -589,16 +650,31 @@ bool EdgeTrustVehicleApp::evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* 
         obuSecondWindowStart = simTime();
     }
     if (obuBsmCountInLastSecond > 10) {
-        outViolationReason = "Rate Anomaly / Flooding Burst (" +
-                             std::to_string(obuBsmCountInLastSecond) + " BSMs/s > 10 limit)";
+        report.ruleName = "[Rule 8: Transmission Rate Limiter - Anti-Flooding Firewall]";
+        report.groundTruth = "802.11p Safety Standard Beacon Frequency = 1 to 10 BSMs/sec";
+        snprintf(buf, sizeof(buf), "Current Generation Rate = %d BSMs/sec (16 Hz burst)", obuBsmCountInLastSecond);
+        report.spoofedData = buf;
+        snprintf(buf, sizeof(buf), "Beacon rate (%d BSMs/s) exceeds 10 BSMs/s wireless channel threshold!", obuBsmCountInLastSecond);
+        report.discrepancy = buf;
+        report.attackIdentified = "DoS Burst Flooding Attack";
+        snprintf(buf, sizeof(buf), "DoS Flooding: %d BSM/s", obuBsmCountInLastSecond);
+        report.shortBadgeSummary = buf;
         return false;
     }
 
-    // 8. Stale / Time-Delay Check
+    // 9. Stale / Time-Delay Check
     simtime_t bsmAge = simTime() - bsm->getTimestamp();
     if (bsmAge > simtime_t(0.5) || bsmAge < -simtime_t(0.1)) {
-        outViolationReason = "Stale Timestamp / Time-Delay Anomaly (Age: " +
-                             std::to_string(bsmAge.dbl()) + "s)";
+        report.ruleName = "[Rule 9: Temporal Freshness - Timestamp vs OBU Real-Time Clock]";
+        snprintf(buf, sizeof(buf), "Current OBU Clock = %.3fs", simTime().dbl());
+        report.groundTruth = buf;
+        snprintf(buf, sizeof(buf), "BSM Generation Timestamp = %.3fs", bsm->getTimestamp().dbl());
+        report.spoofedData = buf;
+        snprintf(buf, sizeof(buf), "Packet Latency/Age (%.3fs) exceeds 0.500s maximum freshness window!", bsmAge.dbl());
+        report.discrepancy = buf;
+        report.attackIdentified = "Stale Data Replay / Time-Delay Attack";
+        snprintf(buf, sizeof(buf), "Stale Timestamp: %.2fs latency", bsmAge.dbl());
+        report.shortBadgeSummary = buf;
         return false;
     }
 

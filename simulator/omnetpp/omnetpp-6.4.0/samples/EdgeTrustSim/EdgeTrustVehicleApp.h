@@ -40,6 +40,15 @@ struct StaleBeaconData {
     int seq;
 };
 
+struct HeuristicViolationReport {
+    std::string ruleName;
+    std::string groundTruth;
+    std::string spoofedData;
+    std::string discrepancy;
+    std::string attackIdentified;
+    std::string shortBadgeSummary;
+};
+
 class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
   public:
     EdgeTrustVehicleApp() = default;
@@ -52,7 +61,7 @@ class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
     virtual void finish() override;
 
     virtual void populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm);
-    virtual bool evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* bsm, std::string& outViolationReason);
+    virtual bool evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* bsm, HeuristicViolationReport& report);
     virtual bool lightweightTrustFilter(DemoSafetyMessage* bsm);
     virtual void drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId);
 
