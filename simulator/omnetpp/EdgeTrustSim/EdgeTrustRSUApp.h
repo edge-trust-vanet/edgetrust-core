@@ -3,7 +3,7 @@
 
 #include "veins/modules/application/ieee80211p/DemoBaseApplLayer.h"
 #include "veins/modules/application/edgetrust/EdgeTrustSafetyMessage_m.h"
-#include "veins/modules/application/edgetrust/LightGBMPredictor.h"
+#include "veins/modules/application/edgetrust/LogisticRegressionPredictor.h"
 #include "veins/modules/application/edgetrust/RandomForestPredictor.h"
 #include <omnetpp/ccanvas.h>
 #include <map>
@@ -88,7 +88,7 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual bool loadCheckpoint(const std::string& filepath);
 
     int rsuId = 0;
-    std::string mlModel = "random_forest"; // "random_forest" or "lightgbm"
+    std::string mlModel = "random_forest"; // "random_forest" or "logistic_regression"
     std::string csvOutputPath;
     std::string mlDataCsvPath;
     double maxCommunicationRange = 85.0; // Realistic 802.11p RSU range (meters)

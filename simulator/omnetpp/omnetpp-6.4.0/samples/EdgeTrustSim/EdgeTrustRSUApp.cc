@@ -91,7 +91,7 @@ void EdgeTrustRSUApp::initialize(int stage)
         checkpointFilePath = hasPar("checkpointFile") ? par("checkpointFile").stringValue() : "results/checkpoint_state.json";
         checkpointInterval = hasPar("checkpointInterval") ? par("checkpointInterval").doubleValue() : 25.0;
 
-        std::string initBadge = (mlModel == "lightgbm") ? "RSU: LightGBM Active" : "RSU: Random Forest Active";
+        std::string initBadge = (mlModel == "logistic_regression" || mlModel == "lr") ? "RSU: Logistic Regression Active" : "RSU: Random Forest Active";
         findHost()->getDisplayString().setTagArg("t", 0, initBadge.c_str());
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
@@ -141,7 +141,7 @@ void EdgeTrustRSUApp::initialize(int stage)
             totalExtractedRecords = 0;
         }
 
-        EV_INFO << "EdgeTrust RSU " << rsuId << " [" << (mlModel == "lightgbm" ? "LightGBM" : "Random Forest")
+        EV_INFO << "EdgeTrust RSU " << rsuId << " [" << ((mlModel == "logistic_regression" || mlModel == "lr") ? "Logistic Regression" : "Random Forest")
                 << " Edge AI] online at intersection." << endl;
     }
 }
@@ -409,7 +409,7 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     rec.lastEvidenceScore = evidence;
     rec.totalEvaluations++;
 
-    // ── Edge AI Inference (Random Forest and LightGBM) ────────
+    // ── Edge AI Inference (Random Forest and Logistic Regression) ────────
     double effectiveAccel = rec.lastAcceleration;
     double rawFeatures[14] = {
         reportedPos.x,
@@ -428,15 +428,15 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         rec.historicalTrustScore
     };
 
-    // Run ONLY the single deployed model configured for this simulation (Random Forest or LightGBM)
+    // Run ONLY the single deployed model configured for this simulation (Random Forest or Logistic Regression)
     int mlPred = 0;
     double maliciousProba = 0.0;
     std::string modelDisplayName;
 
-    if (mlModel == "lightgbm") {
-        mlPred = LightGBMPredictor::predict(rawFeatures);
-        maliciousProba = LightGBMPredictor::predictProba(rawFeatures);
-        modelDisplayName = "LightGBM";
+    if (mlModel == "logistic_regression" || mlModel == "lr") {
+        mlPred = LogisticRegressionPredictor::predict(rawFeatures);
+        maliciousProba = LogisticRegressionPredictor::predictProba(rawFeatures);
+        modelDisplayName = "LogisticRegression";
     } else {
         mlPred = RandomForestPredictor::predict(rawFeatures);
         maliciousProba = RandomForestPredictor::predictProba(rawFeatures);
