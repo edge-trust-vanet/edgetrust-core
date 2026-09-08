@@ -13,4 +13,5 @@ simple EdgeTrustVehicleApp extends DemoBaseApplLayer
         bool isMalicious = default(false);
         string scenarioMode = default("mixed");
         double maxCommunicationRange @unit(m) = default(85m);
+        bool enableOBUHeuristicFilter = default(false);
 }

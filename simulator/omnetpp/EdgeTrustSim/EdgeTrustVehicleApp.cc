@@ -36,6 +36,10 @@ void EdgeTrustVehicleApp::initialize(int stage)
         scenarioMode = hasPar("scenarioMode") ? par("scenarioMode").stdstringValue() : "mixed";
         maliciousRatio = hasPar("maliciousRatio") ? par("maliciousRatio").doubleValue() : 0.25;
         maxCommunicationRange = hasPar("maxCommunicationRange") ? par("maxCommunicationRange").doubleValue() : 85.0;
+        enableOBUHeuristicFilter = hasPar("enableOBUHeuristicFilter") ? par("enableOBUHeuristicFilter").boolValue() : false;
+        if (scenarioMode == "heuristic_filtering" || scenarioMode == "heuristic") {
+            enableOBUHeuristicFilter = true;
+        }
 
         int singleAttack = parseScenarioAttackType(scenarioMode);
 
@@ -130,7 +134,13 @@ void EdgeTrustVehicleApp::initialize(int stage)
             if (attackType > 0) isMalicious = true;
         }
 
-        findHost()->getDisplayString().setTagArg("t", 0, "Initializing OBU...");
+        if (enableOBUHeuristicFilter) {
+            char badge[96];
+            snprintf(badge, sizeof(badge), "V%d: OBU Heuristic Guard Active", vehicleId);
+            findHost()->getDisplayString().setTagArg("t", 0, badge);
+        } else {
+            findHost()->getDisplayString().setTagArg("t", 0, "Initializing OBU...");
+        }
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
         findHost()->getDisplayString().setTagArg("i", 1, "green");
@@ -148,6 +158,37 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
 
         bool attackActive = (isMalicious && sequenceNumber >= attackStartMessage);
 
+        // OBU Local Heuristic Firewall (when heuristic filtering mode is active)
+        if (enableOBUHeuristicFilter && attackActive) {
+            std::string violationReason;
+            bool passed = evaluateOBUOutgoingHeuristics(bsm, violationReason);
+            if (!passed) {
+                totalPacketsDropped++;
+                totalHeuristicFiltered++;
+                delete bsm;
+
+                char tagStr[140];
+                snprintf(tagStr, sizeof(tagStr), "V%d: [OBU HEURISTIC BLOCKED] Dropped locally!", vehicleId);
+                findHost()->getDisplayString().setTagArg("t", 0, tagStr);
+                findHost()->getDisplayString().setTagArg("t", 1, "t");
+                findHost()->getDisplayString().setTagArg("t", 2, "red");
+                findHost()->getDisplayString().setTagArg("i", 1, "red");
+
+                findHost()->bubble("OBU: Heuristic Blocked (Not sent to RSU!)");
+
+                EV_INFO << "============================================================" << endl;
+                EV_INFO << " [t=" << simTime() << "s] [OBU HEURISTIC FILTER] Vehicle " << vehicleId
+                        << " BLOCKED Outgoing BSM!" << endl;
+                EV_INFO << "   -> Kinematic Failure: " << violationReason << endl;
+                EV_INFO << "   -> Local OBU Action: DROPPED AT VEHICLE. 0% sent to RSU." << endl;
+                EV_INFO << "============================================================" << endl;
+
+                simtime_t nextInterval = (attackType == ATTACK_DOS_FLOOD) ? simtime_t(0.06) : beaconInterval;
+                scheduleAt(simTime() + nextInterval, sendBeaconEvt);
+                return;
+            }
+        }
+
         // Blackhole attack: intentionally drop 70% of outgoing communications
         bool dropThis = (attackActive && attackType == ATTACK_BLACKHOLE && ((rand() % 10) < 7));
         if (dropThis) {
@@ -164,6 +205,11 @@ void EdgeTrustVehicleApp::handleSelfMsg(cMessage* msg)
             if (attackActive && (attackType == ATTACK_TIME_DELAY || attackType == ATTACK_DATA_REPLAY)) {
                 bsm->setTimestamp(simTime() - simtime_t(3.0));
             }
+
+            lastTransmittedPos = bsm->getSenderPos();
+            lastTransmittedTime = simTime();
+            lastTransmittedSpeed = bsm->getSenderSpeed().length();
+
             sendDown(bsm);
             totalPacketsSent++;
         }
@@ -452,6 +498,113 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
     bsm->setAttackType(attackActive ? attackType : 0);
 }
 
+bool EdgeTrustVehicleApp::evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* bsm, std::string& outViolationReason)
+{
+    if (!bsm) return true;
+
+    double reportedSpeed = bsm->getSenderSpeed().length();
+    Coord bsmPos = bsm->getSenderPos();
+    double accel = bsm->getAcceleration();
+    double heading = bsm->getHeading();
+
+    double canBusSpeed = 0.0;
+    if (mobility) {
+        try {
+            canBusSpeed = mobility->getSpeed();
+            if (canBusSpeed < 0.0) canBusSpeed = curSpeed.length();
+        } catch (...) {
+            canBusSpeed = curSpeed.length();
+        }
+    } else {
+        canBusSpeed = curSpeed.length();
+    }
+
+    // 1. Plausibility Check: Urban Speed Limits (0 - 45 m/s)
+    if (reportedSpeed < 0.0 || reportedSpeed > 45.0) {
+        outViolationReason = "Speed Plausibility Failure (" + std::to_string((int)reportedSpeed) + " m/s exceeds urban max 45 m/s)";
+        return false;
+    }
+
+    // 2. Physical Acceleration Bounds (-8.5 to 6.0 m/s^2)
+    if (accel < -8.5 || accel > 6.0) {
+        outViolationReason = "Kinematic Acceleration Bound Exceeded (" + std::to_string(accel) + " m/s^2 outside [-8.5, 6.0])";
+        return false;
+    }
+
+    // 3. Sensor Consistency: Internal CAN-Bus Speedometer vs BSM Speed
+    if (std::abs(reportedSpeed - canBusSpeed) > 4.5) {
+        outViolationReason = "CAN-Bus vs BSM Speed Discrepancy (CAN: " +
+                             std::to_string((int)canBusSpeed) + " m/s vs BSM: " +
+                             std::to_string((int)reportedSpeed) + " m/s)";
+        return false;
+    }
+
+    // 4. Ghost Sudden Stop Anomaly
+    if (reportedSpeed < 0.5 && accel <= -8.0 && canBusSpeed > 2.5) {
+        outViolationReason = "Ghost Sudden Stop Anomaly (CAN: " +
+                             std::to_string((int)canBusSpeed) + " m/s vs BSM: 0 m/s with -9.2 m/s^2)";
+        return false;
+    }
+
+    // 5. Position Jump & Implied Speed Check
+    if (lastTransmittedTime > SIMTIME_ZERO) {
+        simtime_t dt = simTime() - lastTransmittedTime;
+        if (dt.dbl() > 0.001 && dt.dbl() < 3.0) {
+            double displacement = lastTransmittedPos.distance(bsmPos);
+            double maxAllowedDisplacement = (std::max(canBusSpeed, reportedSpeed) * dt.dbl()) + 8.0;
+            if (displacement > maxAllowedDisplacement || (displacement / dt.dbl()) > 45.0) {
+                outViolationReason = "Kinematic Position Jump (Displacement: " +
+                                     std::to_string((int)displacement) + " m in " +
+                                     std::to_string(dt.dbl()) + "s, Implied: " +
+                                     std::to_string((int)(displacement / dt.dbl())) + " m/s)";
+                return false;
+            }
+            if (reportedSpeed < 0.5 && displacement > 4.0) {
+                outViolationReason = "Zero-Speed Displacement Contradiction (Speed=0 m/s but moved " +
+                                     std::to_string((int)displacement) + " m)";
+                return false;
+            }
+
+            // 6. Heading vs Vector Motion Angle Check
+            if (displacement > 1.5 && canBusSpeed > 1.5) {
+                double motionAngle = std::fmod(std::atan2(bsmPos.y - lastTransmittedPos.y, bsmPos.x - lastTransmittedPos.x) * 180.0 / M_PI + 360.0, 360.0);
+                double hDiff = std::abs(heading - motionAngle);
+                if (hDiff > 180.0) hDiff = 360.0 - hDiff;
+                if (hDiff > 95.0) {
+                    outViolationReason = "Heading Vector Inconsistency (Heading: " +
+                                         std::to_string((int)heading) + " deg vs Motion Vector: " +
+                                         std::to_string((int)motionAngle) + " deg, diff: " +
+                                         std::to_string((int)hDiff) + " deg)";
+                    return false;
+                }
+            }
+        }
+    }
+
+    // 7. Rate Anomaly / Flooding Burst Detection
+    if (simTime() - obuSecondWindowStart < 1.0) {
+        obuBsmCountInLastSecond++;
+    } else {
+        obuBsmCountInLastSecond = 1;
+        obuSecondWindowStart = simTime();
+    }
+    if (obuBsmCountInLastSecond > 10) {
+        outViolationReason = "Rate Anomaly / Flooding Burst (" +
+                             std::to_string(obuBsmCountInLastSecond) + " BSMs/s > 10 limit)";
+        return false;
+    }
+
+    // 8. Stale / Time-Delay Check
+    simtime_t bsmAge = simTime() - bsm->getTimestamp();
+    if (bsmAge > simtime_t(0.5) || bsmAge < -simtime_t(0.1)) {
+        outViolationReason = "Stale Timestamp / Time-Delay Anomaly (Age: " +
+                             std::to_string(bsmAge.dbl()) + "s)";
+        return false;
+    }
+
+    return true; // All local heuristics passed!
+}
+
 bool EdgeTrustVehicleApp::lightweightTrustFilter(DemoSafetyMessage* bsm)
 {
     EdgeTrustSafetyMessage* emsg = dynamic_cast<EdgeTrustSafetyMessage*>(bsm);
@@ -468,9 +621,28 @@ bool EdgeTrustVehicleApp::lightweightTrustFilter(DemoSafetyMessage* bsm)
     }
 
     double speedMag = bsm->getSenderSpeed().length();
-    if (speedMag > 50.0) { // Kinematics anomaly: impossible urban speed
+    if (speedMag > 45.0) { // Kinematics anomaly: impossible urban speed
         if (senderId != -1) suspiciousNodes[senderId] = true;
         return false;
+    }
+
+    // V2V Peer Kinematic Plausibility
+    if (senderId != -1 && peerRecords.count(senderId) > 0) {
+        Coord bsmPos = bsm->getSenderPos();
+        simtime_t dt = simTime() - peerRecords[senderId].lastTime;
+        if (dt.dbl() > 0.001 && dt.dbl() < 3.0) {
+            double disp = peerRecords[senderId].lastPos.distance(bsmPos);
+            if ((disp / dt.dbl()) > 45.0) {
+                suspiciousNodes[senderId] = true;
+                return false;
+            }
+        }
+    }
+
+    if (senderId != -1) {
+        peerRecords[senderId].lastPos = bsm->getSenderPos();
+        peerRecords[senderId].lastSpeed = speedMag;
+        peerRecords[senderId].lastTime = simTime();
     }
 
     return true;
@@ -502,6 +674,9 @@ void EdgeTrustVehicleApp::onBSM(DemoSafetyMessage* bsm)
     // Peer vehicle message: run lightweight trust filter
     if (!lightweightTrustFilter(bsm)) {
         findHost()->bubble("OBU: Filter Dropped Malicious BSM!");
+        EdgeTrustSafetyMessage* emsg = dynamic_cast<EdgeTrustSafetyMessage*>(bsm);
+        EV_INFO << "OBU Vehicle " << vehicleId << ": Dropped rogue BSM from Vehicle "
+                << (emsg ? emsg->getSenderId() : -1) << " via V2V Heuristic Filter." << endl;
         return;
     }
 }
@@ -516,6 +691,7 @@ void EdgeTrustVehicleApp::finish()
     DemoBaseApplLayer::finish();
     recordScalar("edgeTrust_totalPacketsSent", totalPacketsSent);
     recordScalar("edgeTrust_totalPacketsDropped", totalPacketsDropped);
+    recordScalar("edgeTrust_totalHeuristicFiltered", totalHeuristicFiltered);
 }
 
 } // namespace veins

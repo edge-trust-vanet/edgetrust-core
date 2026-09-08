@@ -52,6 +52,7 @@ class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
     virtual void finish() override;
 
     virtual void populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm);
+    virtual bool evaluateOBUOutgoingHeuristics(EdgeTrustSafetyMessage* bsm, std::string& outViolationReason);
     virtual bool lightweightTrustFilter(DemoSafetyMessage* bsm);
     virtual void drawArrow(const Coord& from, const Coord& to, const std::string& color, const std::string& arrowId);
 
@@ -83,6 +84,20 @@ class VEINS_API EdgeTrustVehicleApp : public DemoBaseApplLayer {
     std::deque<StaleBeaconData> staleHistory;
 
     std::map<int, bool> suspiciousNodes;
+    bool enableOBUHeuristicFilter = false;
+    int totalHeuristicFiltered = 0;
+    Coord lastTransmittedPos;
+    simtime_t lastTransmittedTime = SIMTIME_ZERO;
+    double lastTransmittedSpeed = 0.0;
+    int obuBsmCountInLastSecond = 0;
+    simtime_t obuSecondWindowStart = SIMTIME_ZERO;
+
+    struct PeerRecord {
+        Coord lastPos;
+        double lastSpeed = 0.0;
+        simtime_t lastTime = SIMTIME_ZERO;
+    };
+    std::map<int, PeerRecord> peerRecords;
 };
 
 } // namespace veins
