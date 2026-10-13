@@ -17,4 +17,6 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         bool loadCheckpoint = default(false);
         string checkpointFile = default("results/checkpoint_state.json");
         double checkpointInterval @unit(s) = default(25s);
+        bool enableInterRSU = default(true);
+        double interRsuSyncInterval @unit(s) = default(2.5s);
 }

@@ -91,7 +91,12 @@ void EdgeTrustRSUApp::initialize(int stage)
         checkpointFilePath = hasPar("checkpointFile") ? par("checkpointFile").stringValue() : "results/checkpoint_state.json";
         checkpointInterval = hasPar("checkpointInterval") ? par("checkpointInterval").doubleValue() : 25.0;
 
-        std::string initBadge = (mlModel == "logistic_regression" || mlModel == "lr") ? "RSU: Logistic Regression Active" : "RSU: Random Forest Active";
+        enableInterRSU = hasPar("enableInterRSU") ? par("enableInterRSU").boolValue() : true;
+        interRsuSyncInterval = hasPar("interRsuSyncInterval") ? par("interRsuSyncInterval").doubleValue() : 2.5;
+
+        std::string sectorName = (rsuId == 0) ? "Grid 1 Sector" : "Grid 2 Sector";
+        std::string modelName = (mlModel == "logistic_regression" || mlModel == "lr") ? "Logistic Regression" : "Random Forest";
+        std::string initBadge = "RSU-" + std::to_string(rsuId) + " [" + sectorName + " | " + modelName + " Active]";
         findHost()->getDisplayString().setTagArg("t", 0, initBadge.c_str());
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
@@ -100,7 +105,7 @@ void EdgeTrustRSUApp::initialize(int stage)
         if (loadCheckpointEnabled) {
             bool loaded = loadCheckpoint(checkpointFilePath);
             if (loaded) {
-                EV_INFO << "EdgeTrust RSU " << rsuId << ": Resumed simulation from checkpoint ["
+                EV_INFO << "EdgeTrust RSU " << rsuId << " (" << sectorName << "): Resumed simulation from checkpoint ["
                         << checkpointFilePath << "] with " << vehicleRecords.size()
                         << " pre-warmed vehicle states." << endl;
             }
@@ -109,6 +114,13 @@ void EdgeTrustRSUApp::initialize(int stage)
         if (saveCheckpointEnabled && checkpointInterval > 0.0) {
             checkpointTimerMsg = new cMessage("checkpointTimer");
             scheduleAt(simTime() + checkpointInterval, checkpointTimerMsg);
+        }
+
+        if (enableInterRSU && interRsuSyncInterval > 0.0) {
+            interRsuSyncTimerMsg = new cMessage("interRsuSyncTimer");
+            // Stagger initial sync (RSU 0 at 2.0s, RSU 1 at 3.25s) to avoid simultaneous bursts
+            simtime_t startOffset = SimTime(rsuId == 0 ? 2.0 : 3.25);
+            scheduleAt(simTime() + startOffset, interRsuSyncTimerMsg);
         }
 
         std::lock_guard<std::mutex> lock(csvFileMutex);
@@ -141,13 +153,21 @@ void EdgeTrustRSUApp::initialize(int stage)
             totalExtractedRecords = 0;
         }
 
-        EV_INFO << "EdgeTrust RSU " << rsuId << " [" << ((mlModel == "logistic_regression" || mlModel == "lr") ? "Logistic Regression" : "Random Forest")
-                << " Edge AI] online at intersection." << endl;
+        EV_INFO << "EdgeTrust RSU " << rsuId << " (" << sectorName << ") [" << modelName
+                << " Edge AI | I2I Backbone " << (enableInterRSU ? "ENABLED" : "DISABLED")
+                << "] online at junction." << endl;
     }
 }
 
 void EdgeTrustRSUApp::handleSelfMsg(cMessage* msg)
 {
+    if (msg == interRsuSyncTimerMsg) {
+        if (enableInterRSU) {
+            sendInterRSUTrustSync();
+        }
+        scheduleAt(simTime() + interRsuSyncInterval, interRsuSyncTimerMsg);
+        return;
+    }
     if (msg == checkpointTimerMsg) {
         if (saveCheckpointEnabled) {
             saveCheckpoint(checkpointFilePath);
@@ -198,6 +218,19 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         EV_DEBUG << "RSU " << rsuId << ": Node " << senderId << " outside coverage ("
                  << dist << "m > " << maxCommunicationRange << "m). Discarding." << endl;
         return;
+    }
+
+    Coord rsu0Pos(58.0, 49.0, 3.0);
+    Coord rsu1Pos(178.0, 49.0, 3.0);
+    double distRSU0 = rsu0Pos.distance(reportedPos);
+    double distRSU1 = rsu1Pos.distance(reportedPos);
+    bool isPrimaryServing = (rsuId == 0) ? (distRSU0 <= distRSU1) : (distRSU1 < distRSU0);
+    bool inHandoverCorridor = (distRSU0 <= maxCommunicationRange && distRSU1 <= maxCommunicationRange);
+    std::string sectorName = (rsuId == 0) ? "Grid 1 Sector" : "Grid 2 Sector";
+
+    bool isPreQuarantined = (quarantinedNodes.find(senderId) != quarantinedNodes.end());
+    if (isPreQuarantined) {
+        isMal = true;
     }
 
     Coord reportedSpeedCoord = bsm->getSenderSpeed();
@@ -385,9 +418,15 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     // ── Exponential Moving Average Trust Update ──────────────────────────────
     const double ALPHA = 0.70;
     rec.trustScore = (ALPHA * rec.trustScore) + ((1.0 - ALPHA) * evidence);
+    if (isPreQuarantined) {
+        rec.trustScore = std::min(rec.trustScore, 0.12);
+    }
 
     // ── Historical Trust Score (Long-term reputation tracking) ───────────────
     rec.historicalTrustScore = (0.85 * rec.historicalTrustScore) + (0.15 * rec.trustScore);
+    if (isPreQuarantined) {
+        rec.historicalTrustScore = std::min(rec.historicalTrustScore, 0.12);
+    }
 
     // ── Neighbor Trust Score Average ─────────────────────────────────────────
     double nNoise = ((rand() % 40) - 20) / 1000.0;
@@ -451,7 +490,7 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
 
     // ── Hybrid Decision Engine ────────────────────────────────
     std::string verdict;
-    if (rec.trustScore < 0.40 && mlPred == 1) {
+    if (isPreQuarantined || (rec.trustScore < 0.40 && mlPred == 1)) {
         verdict = "BLOCK";
     } else if (rec.trustScore < 0.70 || mlPred == 1) {
         verdict = "WARN";
@@ -459,6 +498,13 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
         verdict = "ACCEPT";
     }
     rec.lastVerdict = verdict;
+
+    // Trigger urgent I2I threat alert if newly blocked
+    if (verdict == "BLOCK" && enableInterRSU && quarantinedNodes.find(senderId) == quarantinedNodes.end()) {
+        quarantinedNodes.insert(senderId);
+        std::string alertReason = "Misbehavior detected by " + modelDisplayName + " at RSU " + std::to_string(rsuId);
+        sendInterRSUThreatAlert(senderId, attackType, classConfidence, alertReason);
+    }
 
     // Visual feedback
     cModule* parent = findHost()->getParentModule();
@@ -486,19 +532,23 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     std::string arrowColor = (verdict == "BLOCK") ? "red" : (verdict == "WARN" ? "orange" : "green");
     addTransmissionArrow(senderVisualPos, rsuVisualPos, arrowColor);
 
-    char badge[160];
-    snprintf(badge, sizeof(badge), "RSU-%d [%s: %s V%d | %s: %d%% | Trust: %.2f]",
-             rsuId, modelDisplayName.c_str(), verdict.c_str(), senderId,
+    char badge[180];
+    snprintf(badge, sizeof(badge), "RSU-%d (%s) [%s: %s V%d | %s: %d%% | Trust: %.2f]",
+             rsuId, (rsuId == 0 ? "Grid 1" : "Grid 2"), modelDisplayName.c_str(), verdict.c_str(), senderId,
              (mlPred == 1 ? "MAL" : "NORM"), (int)(classConfidence * 100), rec.trustScore);
     findHost()->getDisplayString().setTagArg("t", 0, badge);
     findHost()->getDisplayString().setTagArg("t", 1, "t");
     findHost()->getDisplayString().setTagArg("t", 2, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "orange" : "darkgreen")));
     findHost()->getDisplayString().setTagArg("i", 1, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "yellow" : "green")));
 
+    std::string roleTag = isPrimaryServing ? "PRIMARY SERVING" : "HANDOVER OBSERVER";
     EV_INFO << "============================================================" << endl;
     EV_INFO << " [t=" << currentTime << "s] BSM from Node " << senderId
-            << " | Deployed Edge Model: [" << modelDisplayName << "]" << endl;
-    EV_INFO << "   -> Kinematics: Plausibility=" << plausibility
+            << " received at RSU " << rsuId << " [" << sectorName << " | " << roleTag << "]" << endl;
+    EV_INFO << "   -> Range Check: Dist = " << std::fixed << std::setprecision(1) << dist
+            << "m <= " << maxCommunicationRange << "m"
+            << (inHandoverCorridor ? " [Handover Corridor: Both RSUs in range]" : "") << endl;
+    EV_INFO << "   -> Kinematics: Plausibility=" << std::setprecision(2) << plausibility
             << " | Consistency=" << consistency
             << " | DropRatio=" << rec.packetDropRatio << endl;
     EV_INFO << "   -> " << modelDisplayName << " Verdict: "
@@ -507,9 +557,12 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     EV_INFO << "   -> Trust Engine: Direct=" << rec.trustScore
             << " | Hist=" << rec.historicalTrustScore
             << " | Action: [" << verdict << "]" << endl;
+    if (isPreQuarantined) {
+        EV_INFO << "   -> Cross-RSU Status: Preemptively QUARANTINED via I2I Backbone Alert!" << endl;
+    }
     EV_INFO << "============================================================" << endl;
 
-    if (verdict != "ACCEPT") {
+    if (verdict != "ACCEPT" && isPrimaryServing) {
         broadcastSafetyAdvisory(senderId, verdict, classConfidence);
     }
 
@@ -581,6 +634,221 @@ void EdgeTrustRSUApp::addTransmissionArrow(const Coord& from, const Coord& to, c
     line->setEndArrowhead(cFigure::ARROW_TRIANGLE);
 
     canvas->getRootFigure()->addFigure(line);
+}
+
+void EdgeTrustRSUApp::sendInterRSUTrustSync()
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    int peerId = (rsuId == 0) ? 1 : 0;
+    cModule* peerHost = parent->getSubmodule("rsu", peerId);
+    if (!peerHost) return;
+    EdgeTrustRSUApp* peerApp = dynamic_cast<EdgeTrustRSUApp*>(peerHost->getSubmodule("appl"));
+    if (!peerApp) return;
+
+    std::vector<InterRSUDigestEntry> digest;
+    digest.reserve(vehicleRecords.size());
+    for (const auto& kv : vehicleRecords) {
+        const VehicleTelemetry& v = kv.second;
+        if (simTime() - v.lastTime < 12.0) {
+            InterRSUDigestEntry e;
+            e.nodeId = v.nodeId;
+            e.trustScore = v.trustScore;
+            e.historicalTrustScore = v.historicalTrustScore;
+            e.neighborTrustScoreAvg = v.neighborTrustScoreAvg;
+            e.isMalicious = v.isMalicious;
+            e.attackType = v.attackType;
+            e.verdict = v.lastVerdict;
+            e.modelName = v.lastModelName;
+            e.mlPrediction = v.lastMlPrediction;
+            e.mlConfidence = v.lastMlConfidence;
+            e.lastPos = v.lastPos;
+            e.lastSpeed = v.lastSpeed;
+            e.packetDropRatio = v.packetDropRatio;
+            e.falsePacketInjection = v.falsePacketInjection;
+            e.blackholeAttempts = v.blackholeAttackAttempts;
+            e.sybilAttempts = v.sybilAttackAttempts;
+            e.denialOfService = v.denialOfService;
+            e.lastSeen = v.lastTime;
+            digest.push_back(e);
+        }
+    }
+
+    totalI2ISyncsSent++;
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << simTime() << "s] [I2I BACKBONE COMM] RSU " << rsuId
+            << " ===> RSU " << peerId << " (High-Speed Edge Link)" << endl;
+    EV_INFO << "   -> Protocol: Periodic Cooperative Trust & Handover Digest" << endl;
+    EV_INFO << "   -> Exchanged Telemetry: " << digest.size() << " Active Vehicles Synced" << endl;
+    EV_INFO << "   -> Edge Reputation Consensus: Synchronizing Grid " << (rsuId + 1)
+            << " and Grid " << (peerId + 1) << endl;
+    EV_INFO << "============================================================" << endl;
+
+    updateI2ICanvasVisual("sync", "deepskyblue", "I2I Backbone Sync: " + std::to_string(digest.size()) + " Nodes");
+    peerApp->receiveInterRSUTrustSync(rsuId, digest);
+}
+
+void EdgeTrustRSUApp::receiveInterRSUTrustSync(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest)
+{
+    totalI2ISyncsReceived++;
+    int updatedCount = 0;
+    int newHandoverCount = 0;
+
+    for (const auto& entry : digest) {
+        auto it = vehicleRecords.find(entry.nodeId);
+        if (it != vehicleRecords.end()) {
+            VehicleTelemetry& rec = it->second;
+            rec.historicalTrustScore = (0.65 * rec.historicalTrustScore) + (0.35 * entry.historicalTrustScore);
+            rec.neighborTrustScoreAvg = (0.65 * rec.neighborTrustScoreAvg) + (0.35 * entry.trustScore);
+            if (entry.isMalicious) {
+                rec.isMalicious = true;
+                rec.attackType = entry.attackType;
+            }
+            updatedCount++;
+        } else {
+            VehicleTelemetry newRec;
+            newRec.nodeId = entry.nodeId;
+            newRec.firstSeen = simTime();
+            newRec.lastTime = entry.lastSeen;
+            newRec.secondWindowStart = simTime();
+            newRec.lastPos = entry.lastPos;
+            newRec.lastSpeed = entry.lastSpeed;
+            newRec.packetDropRatio = entry.packetDropRatio;
+            newRec.isMalicious = entry.isMalicious;
+            newRec.attackType = entry.attackType;
+            newRec.trustScore = entry.trustScore;
+            newRec.neighborTrustScoreAvg = entry.neighborTrustScoreAvg;
+            newRec.historicalTrustScore = entry.historicalTrustScore;
+            newRec.lastVerdict = entry.verdict;
+            newRec.lastModelName = entry.modelName;
+            newRec.lastMlPrediction = entry.mlPrediction;
+            newRec.lastMlConfidence = entry.mlConfidence;
+            newRec.falsePacketInjection = entry.falsePacketInjection;
+            newRec.blackholeAttackAttempts = entry.blackholeAttempts;
+            newRec.sybilAttackAttempts = entry.sybilAttempts;
+            newRec.denialOfService = entry.denialOfService;
+            vehicleRecords[entry.nodeId] = newRec;
+            newHandoverCount++;
+        }
+    }
+
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << simTime() << "s] [I2I BACKBONE COMM] RSU " << rsuId
+            << " <=== RSU " << sourceRsuId << " Digest Ingested" << endl;
+    EV_INFO << "   -> Updated Existing Records: " << updatedCount << " vehicles" << endl;
+    EV_INFO << "   -> Pre-warmed Handover Candidates: " << newHandoverCount << " vehicles" << endl;
+    EV_INFO << "   -> Multi-Tier Consensus: Global Reputation Converged" << endl;
+    EV_INFO << "============================================================" << endl;
+}
+
+void EdgeTrustRSUApp::sendInterRSUThreatAlert(int offendingNodeId, int attackType, double confidence, const std::string& reason)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    int peerId = (rsuId == 0) ? 1 : 0;
+    cModule* peerHost = parent->getSubmodule("rsu", peerId);
+    if (!peerHost) return;
+    EdgeTrustRSUApp* peerApp = dynamic_cast<EdgeTrustRSUApp*>(peerHost->getSubmodule("appl"));
+    if (!peerApp) return;
+
+    totalI2IAlertsSent++;
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << simTime() << "s] [I2I URGENT THREAT ALERT] RSU " << rsuId
+            << " ===> RSU " << peerId << " (Edge Backbone Fiber Dispatch)" << endl;
+    EV_INFO << "   -> Offending Node: " << offendingNodeId << " | Attack Type ID: " << attackType << endl;
+    EV_INFO << "   -> ML Confidence: " << (int)(confidence * 100) << "% | Reason: " << reason << endl;
+    EV_INFO << "   -> Action: Network-Wide Preemptive Handover Quarantine Dispatched!" << endl;
+    EV_INFO << "============================================================" << endl;
+
+    updateI2ICanvasVisual("alert", "red", "I2I THREAT ALERT: Quarantine Node " + std::to_string(offendingNodeId));
+    peerApp->receiveInterRSUThreatAlert(rsuId, offendingNodeId, attackType, confidence, reason);
+}
+
+void EdgeTrustRSUApp::receiveInterRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason)
+{
+    totalI2IAlertsReceived++;
+    quarantinedNodes.insert(offendingNodeId);
+
+    auto it = vehicleRecords.find(offendingNodeId);
+    if (it != vehicleRecords.end()) {
+        it->second.isMalicious = true;
+        it->second.attackType = attackType;
+        it->second.trustScore = std::min(it->second.trustScore, 0.12);
+        it->second.historicalTrustScore = std::min(it->second.historicalTrustScore, 0.12);
+        it->second.lastVerdict = "BLOCK";
+    } else {
+        VehicleTelemetry qRec;
+        qRec.nodeId = offendingNodeId;
+        qRec.firstSeen = simTime();
+        qRec.lastTime = simTime();
+        qRec.isMalicious = true;
+        qRec.attackType = attackType;
+        qRec.trustScore = 0.10;
+        qRec.historicalTrustScore = 0.10;
+        qRec.lastVerdict = "BLOCK";
+        vehicleRecords[offendingNodeId] = qRec;
+    }
+
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << simTime() << "s] [I2I URGENT THREAT ALERT RECEIVED] RSU " << rsuId
+            << " <=== RSU " << sourceRsuId << endl;
+    EV_INFO << "   -> Preemptive Handover Quarantine Activated for Node " << offendingNodeId << endl;
+    EV_INFO << "   -> Attack Type: " << attackType << " (Confidence: " << (int)(confidence * 100) << "%)" << endl;
+    EV_INFO << "   -> Network Defense: Node " << offendingNodeId << " PRE-BLACKLISTED before entry into Grid " << (rsuId + 1) << "!" << endl;
+    EV_INFO << "============================================================" << endl;
+
+    updateI2ICanvasVisual("alert", "magenta", "RSU " + std::to_string(rsuId) + " Quarantined Node " + std::to_string(offendingNodeId));
+}
+
+void EdgeTrustRSUApp::updateI2ICanvasVisual(const std::string& type, const std::string& color, const std::string& infoText)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cCanvas* canvas = parent->getCanvas();
+    if (!canvas) return;
+    cFigure* root = canvas->getRootFigure();
+    if (!root) return;
+
+    cLineFigure* line = dynamic_cast<cLineFigure*>(root->getFigure("i2i_backbone_line"));
+    if (!line) {
+        line = new cLineFigure("i2i_backbone_line");
+        root->addFigure(line);
+    }
+
+    cModule* rsu0Mod = parent->getSubmodule("rsu", 0);
+    cModule* rsu1Mod = parent->getSubmodule("rsu", 1);
+    Coord p0 = getModuleVisualPos(rsu0Mod, Coord(58, 49, 0));
+    Coord p1 = getModuleVisualPos(rsu1Mod, Coord(178, 49, 0));
+
+    line->setStart(cFigure::Point(p0.x, p0.y));
+    line->setEnd(cFigure::Point(p1.x, p1.y));
+    line->setLineColor(cFigure::Color(color.c_str()));
+    line->setLineWidth(type == "alert" ? 3.5 : 2.0);
+    line->setLineStyle(cFigure::LINE_DASHED);
+
+    cTextFigure* label = dynamic_cast<cTextFigure*>(root->getFigure("i2i_backbone_label"));
+    if (!label) {
+        label = new cTextFigure("i2i_backbone_label");
+        root->addFigure(label);
+    }
+    label->setPosition(cFigure::Point((p0.x + p1.x) / 2.0, ((p0.y + p1.y) / 2.0) - 12.0));
+    label->setText(infoText.c_str());
+    label->setColor(cFigure::Color(color.c_str()));
+}
+
+void EdgeTrustRSUApp::clearI2ICanvasVisual()
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cCanvas* canvas = parent->getCanvas();
+    if (!canvas) return;
+    cFigure* root = canvas->getRootFigure();
+    if (!root) return;
+
+    cFigure* line = root->getFigure("i2i_backbone_line");
+    if (line) delete root->removeFigure(line);
+    cFigure* label = root->getFigure("i2i_backbone_label");
+    if (label) delete root->removeFigure(label);
 }
 
 void EdgeTrustRSUApp::logVehicleFeatures(int nodeId, double posX, double posY,
@@ -726,6 +994,18 @@ void EdgeTrustRSUApp::saveCheckpoint(const std::string& filepath)
         }
     }
 
+    if (rsuId == 0) {
+        std::string primaryPath = "results/checkpoint_state.json";
+        if (filepath != primaryPath) {
+            ensureDirectoryExists(primaryPath);
+            std::ofstream primaryOut(primaryPath, std::ios::out | std::ios::trunc);
+            if (primaryOut.is_open()) {
+                primaryOut << jsonStr;
+                primaryOut.close();
+            }
+        }
+    }
+
     EV_INFO << "EdgeTrust RSU " << rsuId << ": Checkpoint saved ("
             << vehicleRecords.size() << " vehicles) to " << filepath
             << " at t=" << simTime() << "s." << endl;
@@ -733,7 +1013,12 @@ void EdgeTrustRSUApp::saveCheckpoint(const std::string& filepath)
 
 bool EdgeTrustRSUApp::loadCheckpoint(const std::string& filepath)
 {
-    std::ifstream in(filepath);
+    std::string candidatePath = filepath;
+    std::ifstream in(candidatePath);
+    if (!in.is_open()) {
+        candidatePath = "results/checkpoint_state.json";
+        in.open(candidatePath);
+    }
     if (!in.is_open()) {
         EV_WARN << "EdgeTrust RSU " << rsuId << ": Checkpoint file [" << filepath
                 << "] could not be opened. Initializing cold state." << endl;
@@ -826,6 +1111,7 @@ bool EdgeTrustRSUApp::loadCheckpoint(const std::string& filepath)
 void EdgeTrustRSUApp::finish()
 {
     clearTransmissionArrows();
+    clearI2ICanvasVisual();
     if (saveCheckpointEnabled) {
         saveCheckpoint(checkpointFilePath);
     }
@@ -833,10 +1119,20 @@ void EdgeTrustRSUApp::finish()
         cancelAndDelete(checkpointTimerMsg);
         checkpointTimerMsg = nullptr;
     }
+    if (interRsuSyncTimerMsg) {
+        cancelAndDelete(interRsuSyncTimerMsg);
+        interRsuSyncTimerMsg = nullptr;
+    }
     DemoBaseApplLayer::finish();
-    EV_INFO << "EdgeTrust RSU " << rsuId << " finished. Total extracted records: "
-            << totalExtractedRecords << endl;
+    EV_INFO << "EdgeTrust RSU " << rsuId << " finished. Extracted records: "
+            << totalExtractedRecords << " | I2I Syncs [Sent: " << totalI2ISyncsSent
+            << ", Recv: " << totalI2ISyncsReceived << "] | I2I Alerts [Sent: "
+            << totalI2IAlertsSent << ", Recv: " << totalI2IAlertsReceived << "]" << endl;
     recordScalar("edgeTrust_extractedRecords", totalExtractedRecords);
+    recordScalar("edgeTrust_i2iSyncsSent", totalI2ISyncsSent);
+    recordScalar("edgeTrust_i2iSyncsReceived", totalI2ISyncsReceived);
+    recordScalar("edgeTrust_i2iAlertsSent", totalI2IAlertsSent);
+    recordScalar("edgeTrust_i2iAlertsReceived", totalI2IAlertsReceived);
 }
 
 } // namespace veins

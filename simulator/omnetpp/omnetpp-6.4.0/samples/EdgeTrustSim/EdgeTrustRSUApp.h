@@ -7,11 +7,34 @@
 #include "veins/modules/application/edgetrust/RandomForestPredictor.h"
 #include <omnetpp/ccanvas.h>
 #include <map>
+#include <set>
+#include <vector>
 #include <fstream>
 #include <mutex>
 #include <string>
 
 namespace veins {
+
+struct InterRSUDigestEntry {
+    int nodeId = 0;
+    double trustScore = 0.95;
+    double historicalTrustScore = 0.95;
+    double neighborTrustScoreAvg = 0.95;
+    bool isMalicious = false;
+    int attackType = 0;
+    std::string verdict = "ACCEPT";
+    std::string modelName = "RandomForest";
+    int mlPrediction = 0;
+    double mlConfidence = 0.0;
+    Coord lastPos;
+    double lastSpeed = 0.0;
+    double packetDropRatio = 0.0;
+    int falsePacketInjection = 0;
+    int blackholeAttempts = 0;
+    int sybilAttempts = 0;
+    int denialOfService = 0;
+    simtime_t lastSeen = SIMTIME_ZERO;
+};
 
 struct VehicleTelemetry {
     int nodeId = 0;
@@ -65,6 +88,10 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     EdgeTrustRSUApp() = default;
     virtual ~EdgeTrustRSUApp() override = default;
 
+    // Public I2I inter-RSU communication interface
+    virtual void receiveInterRSUTrustSync(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest);
+    virtual void receiveInterRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason);
+
   protected:
     virtual void initialize(int stage) override;
     virtual void onBSM(DemoSafetyMessage* bsm) override;
@@ -75,6 +102,12 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void clearTransmissionArrows();
     virtual void addTransmissionArrow(const Coord& from, const Coord& to, const std::string& color);
     virtual Coord getModuleVisualPos(cModule* mod, const Coord& fallbackPos);
+
+    // I2I communication handlers
+    virtual void sendInterRSUTrustSync();
+    virtual void sendInterRSUThreatAlert(int offendingNodeId, int attackType, double confidence, const std::string& reason);
+    virtual void updateI2ICanvasVisual(const std::string& type, const std::string& color, const std::string& infoText);
+    virtual void clearI2ICanvasVisual();
 
     virtual void logVehicleFeatures(int nodeId, double posX, double posY,
                                    double speed, double direction, double acceleration,
@@ -99,6 +132,16 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     std::string checkpointFilePath = "results/checkpoint_state.json";
     double checkpointInterval = 25.0; // seconds
     cMessage* checkpointTimerMsg = nullptr;
+
+    // I2I edge backbone communication configuration
+    bool enableInterRSU = true;
+    double interRsuSyncInterval = 2.5; // seconds
+    cMessage* interRsuSyncTimerMsg = nullptr;
+    std::set<int> quarantinedNodes;
+    int totalI2ISyncsSent = 0;
+    int totalI2ISyncsReceived = 0;
+    int totalI2IAlertsSent = 0;
+    int totalI2IAlertsReceived = 0;
 
     std::map<int, VehicleTelemetry> vehicleRecords;
 

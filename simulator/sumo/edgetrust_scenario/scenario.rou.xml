@@ -1,14 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
-<!-- generated on 2026-07-16T11:11:53.949409+05:30 by Eclipse SUMO netedit 1.27.1
--->
-
 <routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
-    <!-- Vehicles, persons and containers (sorted by depart) -->
-    <flow id="f_0" begin="0.00" end="3600.00" perHour="40.00" from="-E10" to="E11"/>
-    <flow id="f_1" begin="0.00" end="3600.00" period="90" from="-E10" to="E11"/>
-    <flow id="f_2" begin="0.00" end="3600.00" perHour="40.00" from="-E10" to="E11"/>
-    <flow id="f_3" begin="0.00" end="3600.00" perHour="40.00" from="-E13" to="E10"/>
-    <flow id="f_4" type="DEFAULT_TAXITYPE" begin="0.00" end="3600.00" period="exp(0.02777777777777777624)" color="blue" from="-E11" to="E12"/>
-    <flow id="f_5" begin="0.00" end="3600.00" perHour="100.00" from="-E11" to="E13"/>
+    <!-- Cross-grid Corridor: West to East (Traverses Grid 1 then Grid 2) -->
+    <flow id="f_w_e" begin="0.00" end="3600.00" perHour="60.00" from="-E11" to="E21"/>
+
+    <!-- Cross-grid Corridor: East to West (Traverses Grid 2 then Grid 1) -->
+    <flow id="f_e_w" begin="0.00" end="3600.00" perHour="60.00" from="-E21" to="E11"/>
+
+    <!-- Grid 1 North-South Flow -->
+    <flow id="f_g1_ns" begin="0.00" end="3600.00" perHour="45.00" from="-E12" to="E13"/>
+
+    <!-- Grid 1 South-North Flow -->
+    <flow id="f_g1_sn" begin="0.00" end="3600.00" perHour="45.00" from="-E13" to="E12"/>
+
+    <!-- Grid 2 North-South Flow -->
+    <flow id="f_g2_ns" begin="0.00" end="3600.00" perHour="45.00" from="-E22" to="E23"/>
+
+    <!-- Grid 2 South-North Flow -->
+    <flow id="f_g2_sn" begin="0.00" end="3600.00" perHour="45.00" from="-E23" to="E22"/>
+
+    <!-- Turning Flow: West to Grid 1 North -->
+    <flow id="f_turn_w_g1n" begin="0.00" end="3600.00" perHour="35.00" from="-E11" to="E12"/>
+
+    <!-- Turning Flow: East to Grid 2 South -->
+    <flow id="f_turn_e_g2s" begin="0.00" end="3600.00" perHour="35.00" from="-E21" to="E23"/>
 </routes>
