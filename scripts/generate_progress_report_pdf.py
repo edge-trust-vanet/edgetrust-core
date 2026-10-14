@@ -27,7 +27,7 @@ class SimpleNumberedCanvas(canvas.Canvas):
         self.saveState()
         self.setFont("Helvetica", 9)
         self.setFillColor(colors.black)
-        self.drawString(54, 34, "EdgeTrust-VANET Project")
+        self.drawString(54, 34, "EdgeTrust-VANET Project — Team 43")
         if total_pages > 1:
             self.drawRightString(letter[0] - 54, 34, f"Page {self._pageNumber} of {total_pages}")
         self.setStrokeColor(colors.black)
@@ -41,7 +41,7 @@ def build_pdf(filename):
         pagesize=letter,
         leftMargin=54,
         rightMargin=54,
-        topMargin=46,
+        topMargin=48,
         bottomMargin=54
     )
 
@@ -54,6 +54,16 @@ def build_pdf(filename):
         fontSize=18,
         leading=22,
         textColor=colors.black,
+        spaceAfter=2
+    )
+
+    team_style = ParagraphStyle(
+        'TeamTitle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=16,
+        textColor=colors.black,
         spaceAfter=4
     )
 
@@ -64,8 +74,8 @@ def build_pdf(filename):
         fontSize=13,
         leading=17,
         textColor=colors.black,
-        spaceBefore=14,
-        spaceAfter=7,
+        spaceBefore=16,
+        spaceAfter=8,
         keepWithNext=True
     )
 
@@ -73,18 +83,19 @@ def build_pdf(filename):
         'Bullet',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=9.8,
-        leading=14,
+        fontSize=10,
+        leading=15,
         textColor=colors.black,
         leftIndent=15,
         firstLineIndent=-10,
-        spaceAfter=7
+        spaceAfter=8.5
     )
 
     story = []
 
-    # Title
+    # Title & Team
     story.append(Paragraph("Current Progress and Next Steps", title_style))
+    story.append(Paragraph("Team 43", team_style))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceBefore=4, spaceAfter=10))
 
     # Completed Work
@@ -107,27 +118,23 @@ def build_pdf(filename):
     for pt in completed_points:
         story.append(Paragraph(f"• &nbsp; {pt}", bullet_style))
 
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 8))
 
     # Remaining Work
     story.append(Paragraph("Remaining Work", h2_style))
 
     remaining_points = [
-        "Complete trust synchronization between RSUs.",
-        "Handle duplicate, stale and conflicting trust updates.",
-        "Implement Fog-based regional trust aggregation.",
-        "Integrate SDN-based adaptive forwarding.",
-        "Test different traffic densities and attack scenarios.",
-        "Evaluate accuracy, precision, recall, F1-score, false-positive rate, latency and packet delivery ratio.",
-        "Test scalability with more RSUs and larger network scenarios.",
-        "Benchmark inference latency and resource footprint on physical edge hardware."
+        "Handle duplicate, stale and conflicting trust updates (By 15th October).",
+        "Implement Fog-based regional trust aggregation (By 15th October: Fog layer for 2 RSUs).",
+        "Integrate SDN-based adaptive forwarding (By 16th October: SDN based adaptive forwarding for multiple RSUs).",
+        "Test scalability with more RSUs and larger network scenarios (By 18th October)."
     ]
 
     for pt in remaining_points:
         story.append(Paragraph(f"• &nbsp; {pt}", bullet_style))
 
     doc.build(story, canvasmaker=SimpleNumberedCanvas)
-    print("Done generating adjusted B&W PDF")
+    print("Done")
 
 if __name__ == '__main__':
     build_pdf('/tmp/bw_report.pdf')
