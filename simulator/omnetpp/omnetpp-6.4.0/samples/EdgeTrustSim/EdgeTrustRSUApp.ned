@@ -19,4 +19,5 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         double checkpointInterval @unit(s) = default(25s);
         bool enableInterRSU = default(true);
         double interRsuSyncInterval @unit(s) = default(2.5s);
+        bool enableFogIntegration = default(true);
 }

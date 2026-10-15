@@ -1,5 +1,6 @@
 // EdgeTrustRSUApp.cc
 #include "veins/modules/application/edgetrust/EdgeTrustRSUApp.h"
+#include "veins/modules/application/edgetrust/EdgeTrustFogApp.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -93,6 +94,12 @@ void EdgeTrustRSUApp::initialize(int stage)
 
         enableInterRSU = hasPar("enableInterRSU") ? par("enableInterRSU").boolValue() : true;
         interRsuSyncInterval = hasPar("interRsuSyncInterval") ? par("interRsuSyncInterval").doubleValue() : 2.5;
+        enableFogIntegration = hasPar("enableFogIntegration") ? par("enableFogIntegration").boolValue() : true;
+
+        cModule* parentMod = findHost()->getParentModule();
+        if (enableFogIntegration && parentMod && parentMod->getSubmodule("fog")) {
+            EV_INFO << "EdgeTrust RSU " << rsuId << ": Connected to Regional Fog Layer node 'fog' (Tier-3 Backbone Active)." << endl;
+        }
 
         std::string sectorName = (rsuId == 0) ? "Grid 1 Sector" : "Grid 2 Sector";
         std::string modelName = (mlModel == "logistic_regression" || mlModel == "lr") ? "Logistic Regression" : "Random Forest";
@@ -686,6 +693,10 @@ void EdgeTrustRSUApp::sendInterRSUTrustSync()
 
     updateI2ICanvasVisual("sync", "deepskyblue", "I2I Backbone Sync: " + std::to_string(digest.size()) + " Nodes");
     peerApp->receiveInterRSUTrustSync(rsuId, digest);
+
+    if (enableFogIntegration) {
+        reportToFog(digest);
+    }
 }
 
 void EdgeTrustRSUApp::receiveInterRSUTrustSync(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest)
@@ -762,6 +773,10 @@ void EdgeTrustRSUApp::sendInterRSUThreatAlert(int offendingNodeId, int attackTyp
 
     updateI2ICanvasVisual("alert", "red", "I2I THREAT ALERT: Quarantine Node " + std::to_string(offendingNodeId));
     peerApp->receiveInterRSUThreatAlert(rsuId, offendingNodeId, attackType, confidence, reason);
+
+    if (enableFogIntegration) {
+        reportThreatToFog(offendingNodeId, attackType, confidence, reason);
+    }
 }
 
 void EdgeTrustRSUApp::receiveInterRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason)
@@ -798,6 +813,121 @@ void EdgeTrustRSUApp::receiveInterRSUThreatAlert(int sourceRsuId, int offendingN
     EV_INFO << "============================================================" << endl;
 
     updateI2ICanvasVisual("alert", "magenta", "RSU " + std::to_string(rsuId) + " Quarantined Node " + std::to_string(offendingNodeId));
+}
+
+void EdgeTrustRSUApp::reportToFog(const std::vector<InterRSUDigestEntry>& digest)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cModule* fogHost = parent->getSubmodule("fog");
+    if (!fogHost) return;
+    EdgeTrustFogApp* fogApp = dynamic_cast<EdgeTrustFogApp*>(fogHost);
+    if (!fogApp) {
+        fogApp = dynamic_cast<EdgeTrustFogApp*>(fogHost->getSubmodule("appl"));
+    }
+    if (!fogApp) return;
+
+    totalFogSyncsSent++;
+    EV_INFO << "[t=" << simTime() << "s] [EDGE-TO-FOG UPLINK] RSU " << rsuId
+            << " reporting " << digest.size() << " vehicle digests to Regional Fog Layer." << endl;
+    fogApp->receiveRSUDigest(rsuId, digest);
+}
+
+void EdgeTrustRSUApp::reportThreatToFog(int offendingNodeId, int attackType, double confidence, const std::string& reason)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cModule* fogHost = parent->getSubmodule("fog");
+    if (!fogHost) return;
+    EdgeTrustFogApp* fogApp = dynamic_cast<EdgeTrustFogApp*>(fogHost);
+    if (!fogApp) {
+        fogApp = dynamic_cast<EdgeTrustFogApp*>(fogHost->getSubmodule("appl"));
+    }
+    if (!fogApp) return;
+
+    EV_WARN << "[t=" << simTime() << "s] [EDGE-TO-FOG URGENT ALERT] RSU " << rsuId
+            << " forwarding Threat Incident (Node " << offendingNodeId << ") to Regional Fog Layer." << endl;
+    fogApp->receiveRSUThreatAlert(rsuId, offendingNodeId, attackType, confidence, reason);
+}
+
+void EdgeTrustRSUApp::receiveFogMasterDigest(const std::vector<FogMasterDigestEntry>& masterDigest)
+{
+    totalFogMasterSyncsReceived++;
+    int prewarmed = 0;
+    int aligned = 0;
+
+    for (const auto& entry : masterDigest) {
+        if (entry.isRevoked) {
+            quarantinedNodes.insert(entry.nodeId);
+            auto it = vehicleRecords.find(entry.nodeId);
+            if (it != vehicleRecords.end()) {
+                it->second.isMalicious = true;
+                it->second.attackType = entry.attackType;
+                it->second.trustScore = 0.05;
+                it->second.historicalTrustScore = 0.05;
+                it->second.lastVerdict = "BLOCK";
+            }
+        } else {
+            auto it = vehicleRecords.find(entry.nodeId);
+            if (it != vehicleRecords.end()) {
+                it->second.historicalTrustScore = (0.70 * it->second.historicalTrustScore) + (0.30 * entry.regionalHistoricalTrust);
+                it->second.neighborTrustScoreAvg = (0.70 * it->second.neighborTrustScoreAvg) + (0.30 * entry.regionalTrustScore);
+                aligned++;
+            } else {
+                VehicleTelemetry newRec;
+                newRec.nodeId = entry.nodeId;
+                newRec.firstSeen = simTime();
+                newRec.lastTime = entry.lastSeen;
+                newRec.secondWindowStart = simTime();
+                newRec.lastPos = entry.lastPos;
+                newRec.lastSpeed = entry.lastSpeed;
+                newRec.trustScore = entry.regionalTrustScore;
+                newRec.historicalTrustScore = entry.regionalHistoricalTrust;
+                newRec.neighborTrustScoreAvg = entry.regionalTrustScore;
+                newRec.lastVerdict = entry.verdict;
+                vehicleRecords[entry.nodeId] = newRec;
+                prewarmed++;
+            }
+        }
+    }
+
+    EV_INFO << "[t=" << simTime() << "s] [FOG MASTER INGESTION] RSU " << rsuId
+            << ": Ingested Regional Master Digest (" << masterDigest.size() << " nodes: "
+            << aligned << " aligned, " << prewarmed << " pre-warmed)." << endl;
+}
+
+void EdgeTrustRSUApp::receiveFogRevocation(int offendingNodeId, int attackType, double confidence, const std::string& reason)
+{
+    totalFogRevocationsReceived++;
+    quarantinedNodes.insert(offendingNodeId);
+
+    auto it = vehicleRecords.find(offendingNodeId);
+    if (it != vehicleRecords.end()) {
+        it->second.isMalicious = true;
+        it->second.attackType = attackType;
+        it->second.trustScore = 0.05;
+        it->second.historicalTrustScore = 0.05;
+        it->second.lastVerdict = "BLOCK";
+    } else {
+        VehicleTelemetry qRec;
+        qRec.nodeId = offendingNodeId;
+        qRec.firstSeen = simTime();
+        qRec.lastTime = simTime();
+        qRec.secondWindowStart = simTime();
+        qRec.isMalicious = true;
+        qRec.attackType = attackType;
+        qRec.trustScore = 0.05;
+        qRec.historicalTrustScore = 0.05;
+        qRec.lastVerdict = "BLOCK";
+        vehicleRecords[offendingNodeId] = qRec;
+    }
+
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << simTime() << "s] [FOG CRL REVOCATION ENFORCED] RSU " << rsuId << endl;
+    EV_INFO << "   -> Target Node: " << offendingNodeId << " permanently blacklisted via Fog CRL" << endl;
+    EV_INFO << "   -> Attack Type ID: " << attackType << " | Reason: " << reason << endl;
+    EV_INFO << "   -> Regional CRL synchronized across all intersection sectors" << endl;
+    EV_INFO << "============================================================" << endl;
 }
 
 void EdgeTrustRSUApp::updateI2ICanvasVisual(const std::string& type, const std::string& color, const std::string& infoText)
@@ -1127,12 +1257,18 @@ void EdgeTrustRSUApp::finish()
     EV_INFO << "EdgeTrust RSU " << rsuId << " finished. Extracted records: "
             << totalExtractedRecords << " | I2I Syncs [Sent: " << totalI2ISyncsSent
             << ", Recv: " << totalI2ISyncsReceived << "] | I2I Alerts [Sent: "
-            << totalI2IAlertsSent << ", Recv: " << totalI2IAlertsReceived << "]" << endl;
+            << totalI2IAlertsSent << ", Recv: " << totalI2IAlertsReceived
+            << "] | Fog Uplinks: " << totalFogSyncsSent
+            << " | Fog Master Recv: " << totalFogMasterSyncsReceived
+            << " | Fog Revocations: " << totalFogRevocationsReceived << endl;
     recordScalar("edgeTrust_extractedRecords", totalExtractedRecords);
     recordScalar("edgeTrust_i2iSyncsSent", totalI2ISyncsSent);
     recordScalar("edgeTrust_i2iSyncsReceived", totalI2ISyncsReceived);
     recordScalar("edgeTrust_i2iAlertsSent", totalI2IAlertsSent);
     recordScalar("edgeTrust_i2iAlertsReceived", totalI2IAlertsReceived);
+    recordScalar("edgeTrust_fogSyncsSent", totalFogSyncsSent);
+    recordScalar("edgeTrust_fogMasterSyncsReceived", totalFogMasterSyncsReceived);
+    recordScalar("edgeTrust_fogRevocationsReceived", totalFogRevocationsReceived);
 }
 
 } // namespace veins

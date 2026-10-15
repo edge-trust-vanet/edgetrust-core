@@ -1,0 +1,354 @@
+{
+  "checkpoint_version": 1,
+  "simulation_time_sec": 5.0000,
+  "rsu_id": 0,
+  "edge_model": "random_forest",
+  "total_extracted_records": 25,
+  "tracked_vehicle_count": 8,
+  "vehicles": {
+    "1": {
+      "node_id": 1,
+      "is_malicious": false,
+      "attack_type": 0,
+      "first_seen_s": 3.2500,
+      "last_seen_s": 2.2728,
+      "position_x": 253.6527,
+      "position_y": 68.2300,
+      "speed_mps": 2.5773,
+      "direction_deg": 0.0000,
+      "acceleration_mps2": 0.0000,
+      "packet_sent": 0,
+      "packet_received": 0,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 20.00,
+      "retransmission_count": 0,
+      "signal_strength_dbm": -70.00,
+      "total_evaluations": 0,
+      "trust_factors": {
+        "consistency": 0.9500,
+        "plausibility": 0.9500,
+        "comm_score": 0.9500,
+        "neighbor_validation": 0.9500,
+        "evidence_score": 0.9500
+      },
+      "trust_scores": {
+        "trust_score": 0.9518,
+        "neighbor_trust_score_avg": 0.9556,
+        "historical_trust_score": 0.9530
+      },
+      "attacks_detected": {
+        "false_packet_injection": 0,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 0,
+        "confidence": 0.5947,
+        "verdict": "ACCEPT"
+      }
+    },
+    "2": {
+      "node_id": 2,
+      "is_malicious": true,
+      "attack_type": 1,
+      "first_seen_s": 1.5290,
+      "last_seen_s": 4.5290,
+      "position_x": 103.4974,
+      "position_y": 19.2889,
+      "speed_mps": 0.0000,
+      "direction_deg": 271.3009,
+      "acceleration_mps2": 2.4638,
+      "packet_sent": 24,
+      "packet_received": 24,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 32.86,
+      "retransmission_count": 1,
+      "signal_strength_dbm": -82.50,
+      "total_evaluations": 23,
+      "trust_factors": {
+        "consistency": 1.0000,
+        "plausibility": 0.1000,
+        "comm_score": 0.0800,
+        "neighbor_validation": 0.0600,
+        "evidence_score": 0.3560
+      },
+      "trust_scores": {
+        "trust_score": 0.1200,
+        "neighbor_trust_score_avg": 0.0527,
+        "historical_trust_score": 0.0605
+      },
+      "attacks_detected": {
+        "false_packet_injection": 9,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 1,
+        "confidence": 1.0000,
+        "verdict": "BLOCK"
+      }
+    },
+    "3": {
+      "node_id": 3,
+      "is_malicious": true,
+      "attack_type": 2,
+      "first_seen_s": 1.8362,
+      "last_seen_s": 4.8362,
+      "position_x": 64.1295,
+      "position_y": 38.3932,
+      "speed_mps": 5.6203,
+      "direction_deg": 90.6406,
+      "acceleration_mps2": 2.0196,
+      "packet_sent": 32,
+      "packet_received": 13,
+      "packet_drop_ratio": 0.5938,
+      "latency_ms": 22.06,
+      "retransmission_count": 0,
+      "signal_strength_dbm": -63.48,
+      "total_evaluations": 12,
+      "trust_factors": {
+        "consistency": 0.0800,
+        "plausibility": 1.0000,
+        "comm_score": 0.0500,
+        "neighbor_validation": 0.0600,
+        "evidence_score": 0.2510
+      },
+      "trust_scores": {
+        "trust_score": 0.1103,
+        "neighbor_trust_score_avg": 0.0595,
+        "historical_trust_score": 0.0590
+      },
+      "attacks_detected": {
+        "false_packet_injection": 11,
+        "blackhole_attack_attempts": 8,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 1,
+        "confidence": 0.9933,
+        "verdict": "BLOCK"
+      }
+    },
+    "4": {
+      "node_id": 4,
+      "is_malicious": true,
+      "attack_type": 0,
+      "first_seen_s": 3.2500,
+      "last_seen_s": 3.0203,
+      "position_x": 180.5300,
+      "position_y": 36.4461,
+      "speed_mps": 4.3891,
+      "direction_deg": 0.0000,
+      "acceleration_mps2": 0.0000,
+      "packet_sent": 0,
+      "packet_received": 0,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 20.00,
+      "retransmission_count": 0,
+      "signal_strength_dbm": -70.00,
+      "total_evaluations": 0,
+      "trust_factors": {
+        "consistency": 0.9500,
+        "plausibility": 0.9500,
+        "comm_score": 0.9500,
+        "neighbor_validation": 0.9500,
+        "evidence_score": 0.9500
+      },
+      "trust_scores": {
+        "trust_score": 0.0500,
+        "neighbor_trust_score_avg": 0.1070,
+        "historical_trust_score": 0.0500
+      },
+      "attacks_detected": {
+        "false_packet_injection": 1,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 1,
+        "confidence": 0.8111,
+        "verdict": "BLOCK"
+      }
+    },
+    "5": {
+      "node_id": 5,
+      "is_malicious": true,
+      "attack_type": 0,
+      "first_seen_s": 3.2500,
+      "last_seen_s": 3.1405,
+      "position_x": 206.1300,
+      "position_y": 106.9005,
+      "speed_mps": 15.0596,
+      "direction_deg": 0.0000,
+      "acceleration_mps2": 0.0000,
+      "packet_sent": 0,
+      "packet_received": 0,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 20.00,
+      "retransmission_count": 0,
+      "signal_strength_dbm": -70.00,
+      "total_evaluations": 0,
+      "trust_factors": {
+        "consistency": 0.9500,
+        "plausibility": 0.9500,
+        "comm_score": 0.9500,
+        "neighbor_validation": 0.9500,
+        "evidence_score": 0.9500
+      },
+      "trust_scores": {
+        "trust_score": 0.0500,
+        "neighbor_trust_score_avg": 0.1027,
+        "historical_trust_score": 0.0500
+      },
+      "attacks_detected": {
+        "false_packet_injection": 3,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 1,
+        "confidence": 0.8294,
+        "verdict": "BLOCK"
+      }
+    },
+    "6": {
+      "node_id": 6,
+      "is_malicious": true,
+      "attack_type": 5,
+      "first_seen_s": 1.7993,
+      "last_seen_s": 4.7993,
+      "position_x": 40.8888,
+      "position_y": 77.4803,
+      "speed_mps": 1.0417,
+      "direction_deg": 359.4953,
+      "acceleration_mps2": 1.3641,
+      "packet_sent": 16,
+      "packet_received": 16,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 33.28,
+      "retransmission_count": 2,
+      "signal_strength_dbm": -75.63,
+      "total_evaluations": 15,
+      "trust_factors": {
+        "consistency": 1.0000,
+        "plausibility": 1.0000,
+        "comm_score": 0.0800,
+        "neighbor_validation": 0.0600,
+        "evidence_score": 0.5360
+      },
+      "trust_scores": {
+        "trust_score": 0.1200,
+        "neighbor_trust_score_avg": 0.0632,
+        "historical_trust_score": 0.0605
+      },
+      "attacks_detected": {
+        "false_packet_injection": 8,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 1,
+        "confidence": 0.9783,
+        "verdict": "BLOCK"
+      }
+    },
+    "7": {
+      "node_id": 7,
+      "is_malicious": true,
+      "attack_type": 6,
+      "first_seen_s": 5.7500,
+      "last_seen_s": 5.2189,
+      "position_x": 254.0003,
+      "position_y": 71.4300,
+      "speed_mps": 2.2297,
+      "direction_deg": 0.0000,
+      "acceleration_mps2": 0.0000,
+      "packet_sent": 0,
+      "packet_received": 0,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 20.00,
+      "retransmission_count": 0,
+      "signal_strength_dbm": -70.00,
+      "total_evaluations": 0,
+      "trust_factors": {
+        "consistency": 0.9500,
+        "plausibility": 0.9500,
+        "comm_score": 0.9500,
+        "neighbor_validation": 0.9500,
+        "evidence_score": 0.9500
+      },
+      "trust_scores": {
+        "trust_score": 0.0500,
+        "neighbor_trust_score_avg": 0.1760,
+        "historical_trust_score": 0.0500
+      },
+      "attacks_detected": {
+        "false_packet_injection": 0,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 0,
+        "confidence": 0.5770,
+        "verdict": "BLOCK"
+      }
+    },
+    "8": {
+      "node_id": 8,
+      "is_malicious": true,
+      "attack_type": 0,
+      "first_seen_s": 4.4906,
+      "last_seen_s": 4.2076,
+      "position_x": 30.0589,
+      "position_y": 77.3849,
+      "speed_mps": 0.0000,
+      "direction_deg": 359.4953,
+      "acceleration_mps2": 0.0000,
+      "packet_sent": 15,
+      "packet_received": 15,
+      "packet_drop_ratio": 0.0000,
+      "latency_ms": 17.04,
+      "retransmission_count": 0,
+      "signal_strength_dbm": -75.99,
+      "total_evaluations": 14,
+      "trust_factors": {
+        "consistency": 1.0000,
+        "plausibility": 1.0000,
+        "comm_score": 0.0800,
+        "neighbor_validation": 0.0600,
+        "evidence_score": 0.5360
+      },
+      "trust_scores": {
+        "trust_score": 0.1200,
+        "neighbor_trust_score_avg": 0.0622,
+        "historical_trust_score": 0.0605
+      },
+      "attacks_detected": {
+        "false_packet_injection": 13,
+        "blackhole_attack_attempts": 0,
+        "sybil_attack_attempts": 0,
+        "denial_of_service": 0
+      },
+      "ml_classification": {
+        "model": "RandomForest",
+        "prediction": 1,
+        "confidence": 0.9833,
+        "verdict": "BLOCK"
+      }
+    }
+  }
+}

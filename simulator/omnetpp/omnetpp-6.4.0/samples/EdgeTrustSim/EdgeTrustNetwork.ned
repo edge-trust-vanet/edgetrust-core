@@ -3,6 +3,7 @@
 import org.car2x.veins.nodes.Scenario;
 import org.car2x.veins.nodes.RSU;
 import org.car2x.veins.modules.application.ieee80211p.DemoBaseApplLayer;
+import org.car2x.veins.modules.application.edgetrust.EdgeTrustFogApp;
 
 simple EdgeTrustVehicleApp extends DemoBaseApplLayer {
     parameters:
@@ -20,5 +21,8 @@ network EdgeTrustNetwork extends Scenario {
     submodules:
         rsu[2]: RSU {
             @display("p=150,140;i=veins/sign/yellowdiamond;is=vs");
+        }
+        fog: EdgeTrustFogApp {
+            @display("p=118,20;i=device/server;is=m");
         }
 }

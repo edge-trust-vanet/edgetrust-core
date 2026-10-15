@@ -15,6 +15,10 @@
 
 namespace veins {
 
+// Forward declarations for Fog Layer
+struct FogMasterDigestEntry;
+class EdgeTrustFogApp;
+
 struct InterRSUDigestEntry {
     int nodeId = 0;
     double trustScore = 0.95;
@@ -92,6 +96,10 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void receiveInterRSUTrustSync(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest);
     virtual void receiveInterRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason);
 
+    // Public Fog layer interface
+    virtual void receiveFogMasterDigest(const std::vector<FogMasterDigestEntry>& masterDigest);
+    virtual void receiveFogRevocation(int offendingNodeId, int attackType, double confidence, const std::string& reason);
+
   protected:
     virtual void initialize(int stage) override;
     virtual void onBSM(DemoSafetyMessage* bsm) override;
@@ -108,6 +116,10 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void sendInterRSUThreatAlert(int offendingNodeId, int attackType, double confidence, const std::string& reason);
     virtual void updateI2ICanvasVisual(const std::string& type, const std::string& color, const std::string& infoText);
     virtual void clearI2ICanvasVisual();
+
+    // Fog Layer communication handlers
+    virtual void reportToFog(const std::vector<InterRSUDigestEntry>& digest);
+    virtual void reportThreatToFog(int offendingNodeId, int attackType, double confidence, const std::string& reason);
 
     virtual void logVehicleFeatures(int nodeId, double posX, double posY,
                                    double speed, double direction, double acceleration,
@@ -142,6 +154,12 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     int totalI2ISyncsReceived = 0;
     int totalI2IAlertsSent = 0;
     int totalI2IAlertsReceived = 0;
+
+    // Fog Layer integration configuration & statistics
+    bool enableFogIntegration = true;
+    int totalFogSyncsSent = 0;
+    int totalFogMasterSyncsReceived = 0;
+    int totalFogRevocationsReceived = 0;
 
     std::map<int, VehicleTelemetry> vehicleRecords;
 
