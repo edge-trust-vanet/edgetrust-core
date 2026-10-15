@@ -1,6 +1,7 @@
 // EdgeTrustRSUApp.cc
 #include "veins/modules/application/edgetrust/EdgeTrustRSUApp.h"
 #include "veins/modules/application/edgetrust/EdgeTrustFogApp.h"
+#include "veins/modules/application/edgetrust/EdgeTrustSDNController.h"
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -95,13 +96,21 @@ void EdgeTrustRSUApp::initialize(int stage)
         enableInterRSU = hasPar("enableInterRSU") ? par("enableInterRSU").boolValue() : true;
         interRsuSyncInterval = hasPar("interRsuSyncInterval") ? par("interRsuSyncInterval").doubleValue() : 2.5;
         enableFogIntegration = hasPar("enableFogIntegration") ? par("enableFogIntegration").boolValue() : true;
+        fogId = hasPar("fogId") ? par("fogId").intValue() : (rsuId < 2 ? 0 : 1);
+        defaultPeerRsuId = hasPar("defaultPeerRsuId") ? par("defaultPeerRsuId").intValue() : ((rsuId % 2 == 0) ? (rsuId + 1) : (rsuId - 1));
+        enableSDN = hasPar("enableSDN") ? par("enableSDN").boolValue() : true;
+        sdnPacketInterval = hasPar("sdnPacketInterval") ? par("sdnPacketInterval").doubleValue() : 2.0;
 
         cModule* parentMod = findHost()->getParentModule();
-        if (enableFogIntegration && parentMod && parentMod->getSubmodule("fog")) {
-            EV_INFO << "EdgeTrust RSU " << rsuId << ": Connected to Regional Fog Layer node 'fog' (Tier-3 Backbone Active)." << endl;
+        if (enableFogIntegration && parentMod) {
+            cModule* fogMod = parentMod->getSubmodule("fog", fogId);
+            if (!fogMod) fogMod = parentMod->getSubmodule("fog");
+            if (fogMod) {
+                EV_INFO << "EdgeTrust RSU " << rsuId << ": Connected to Regional Fog Layer Cluster " << fogId << " (Tier-3 Backbone Active)." << endl;
+            }
         }
 
-        std::string sectorName = (rsuId == 0) ? "Grid 1 Sector" : "Grid 2 Sector";
+        std::string sectorName = (rsuId < 2) ? ("Grid 1 Sector (RSU " + std::to_string(rsuId) + ")") : ("Grid 2 Sector (RSU " + std::to_string(rsuId) + ")");
         std::string modelName = (mlModel == "logistic_regression" || mlModel == "lr") ? "Logistic Regression" : "Random Forest";
         std::string initBadge = "RSU-" + std::to_string(rsuId) + " [" + sectorName + " | " + modelName + " Active]";
         findHost()->getDisplayString().setTagArg("t", 0, initBadge.c_str());
@@ -125,9 +134,15 @@ void EdgeTrustRSUApp::initialize(int stage)
 
         if (enableInterRSU && interRsuSyncInterval > 0.0) {
             interRsuSyncTimerMsg = new cMessage("interRsuSyncTimer");
-            // Stagger initial sync (RSU 0 at 2.0s, RSU 1 at 3.25s) to avoid simultaneous bursts
-            simtime_t startOffset = SimTime(rsuId == 0 ? 2.0 : 3.25);
+            // Stagger initial sync to avoid simultaneous bursts
+            simtime_t startOffset = SimTime(1.8 + (rsuId * 0.35));
             scheduleAt(simTime() + startOffset, interRsuSyncTimerMsg);
+        }
+
+        if (enableSDN && sdnPacketInterval > 0.0) {
+            sdnPacketTimerMsg = new cMessage("sdnPacketTimer");
+            simtime_t sdnOffset = SimTime(1.5 + (rsuId * 0.4));
+            scheduleAt(simTime() + sdnOffset, sdnPacketTimerMsg);
         }
 
         std::lock_guard<std::mutex> lock(csvFileMutex);
@@ -162,7 +177,19 @@ void EdgeTrustRSUApp::initialize(int stage)
 
         EV_INFO << "EdgeTrust RSU " << rsuId << " (" << sectorName << ") [" << modelName
                 << " Edge AI | I2I Backbone " << (enableInterRSU ? "ENABLED" : "DISABLED")
-                << "] online at junction." << endl;
+                << " | SDN " << (enableSDN ? "ENABLED" : "DISABLED") << "] online at junction." << endl;
+    }
+    else if (stage == 1) {
+        cModule* parentMod = findHost()->getParentModule();
+        if (parentMod && enableSDN) {
+            cModule* sdnMod = parentMod->getSubmodule("sdn");
+            if (sdnMod) {
+                EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+                if (sdn) {
+                    sdn->registerRSU(rsuId, curPosition, fogId);
+                }
+            }
+        }
     }
 }
 
@@ -180,6 +207,13 @@ void EdgeTrustRSUApp::handleSelfMsg(cMessage* msg)
             saveCheckpoint(checkpointFilePath);
         }
         scheduleAt(simTime() + checkpointInterval, checkpointTimerMsg);
+        return;
+    }
+    if (msg == sdnPacketTimerMsg) {
+        if (enableSDN) {
+            sendSDNTransitPacket();
+        }
+        scheduleAt(simTime() + sdnPacketInterval, sdnPacketTimerMsg);
         return;
     }
     DemoBaseApplLayer::handleSelfMsg(msg);
@@ -647,7 +681,7 @@ void EdgeTrustRSUApp::sendInterRSUTrustSync()
 {
     cModule* parent = findHost()->getParentModule();
     if (!parent) return;
-    int peerId = (rsuId == 0) ? 1 : 0;
+    int peerId = defaultPeerRsuId;
     cModule* peerHost = parent->getSubmodule("rsu", peerId);
     if (!peerHost) return;
     EdgeTrustRSUApp* peerApp = dynamic_cast<EdgeTrustRSUApp*>(peerHost->getSubmodule("appl"));
@@ -687,8 +721,8 @@ void EdgeTrustRSUApp::sendInterRSUTrustSync()
             << " ===> RSU " << peerId << " (High-Speed Edge Link)" << endl;
     EV_INFO << "   -> Protocol: Periodic Cooperative Trust & Handover Digest" << endl;
     EV_INFO << "   -> Exchanged Telemetry: " << digest.size() << " Active Vehicles Synced" << endl;
-    EV_INFO << "   -> Edge Reputation Consensus: Synchronizing Grid " << (rsuId + 1)
-            << " and Grid " << (peerId + 1) << endl;
+    EV_INFO << "   -> Edge Reputation Consensus: Synchronizing RSU " << rsuId
+            << " and RSU " << peerId << endl;
     EV_INFO << "============================================================" << endl;
 
     updateI2ICanvasVisual("sync", "deepskyblue", "I2I Backbone Sync: " + std::to_string(digest.size()) + " Nodes");
@@ -701,6 +735,7 @@ void EdgeTrustRSUApp::sendInterRSUTrustSync()
 
 void EdgeTrustRSUApp::receiveInterRSUTrustSync(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest)
 {
+    Enter_Method_Silent();
     totalI2ISyncsReceived++;
     int updatedCount = 0;
     int newHandoverCount = 0;
@@ -756,7 +791,7 @@ void EdgeTrustRSUApp::sendInterRSUThreatAlert(int offendingNodeId, int attackTyp
 {
     cModule* parent = findHost()->getParentModule();
     if (!parent) return;
-    int peerId = (rsuId == 0) ? 1 : 0;
+    int peerId = defaultPeerRsuId;
     cModule* peerHost = parent->getSubmodule("rsu", peerId);
     if (!peerHost) return;
     EdgeTrustRSUApp* peerApp = dynamic_cast<EdgeTrustRSUApp*>(peerHost->getSubmodule("appl"));
@@ -781,6 +816,7 @@ void EdgeTrustRSUApp::sendInterRSUThreatAlert(int offendingNodeId, int attackTyp
 
 void EdgeTrustRSUApp::receiveInterRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason)
 {
+    Enter_Method_Silent();
     totalI2IAlertsReceived++;
     quarantinedNodes.insert(offendingNodeId);
 
@@ -809,7 +845,7 @@ void EdgeTrustRSUApp::receiveInterRSUThreatAlert(int sourceRsuId, int offendingN
             << " <=== RSU " << sourceRsuId << endl;
     EV_INFO << "   -> Preemptive Handover Quarantine Activated for Node " << offendingNodeId << endl;
     EV_INFO << "   -> Attack Type: " << attackType << " (Confidence: " << (int)(confidence * 100) << "%)" << endl;
-    EV_INFO << "   -> Network Defense: Node " << offendingNodeId << " PRE-BLACKLISTED before entry into Grid " << (rsuId + 1) << "!" << endl;
+    EV_INFO << "   -> Network Defense: Node " << offendingNodeId << " PRE-BLACKLISTED before entry into Sector " << rsuId << "!" << endl;
     EV_INFO << "============================================================" << endl;
 
     updateI2ICanvasVisual("alert", "magenta", "RSU " + std::to_string(rsuId) + " Quarantined Node " + std::to_string(offendingNodeId));
@@ -819,7 +855,8 @@ void EdgeTrustRSUApp::reportToFog(const std::vector<InterRSUDigestEntry>& digest
 {
     cModule* parent = findHost()->getParentModule();
     if (!parent) return;
-    cModule* fogHost = parent->getSubmodule("fog");
+    cModule* fogHost = parent->getSubmodule("fog", fogId);
+    if (!fogHost) fogHost = parent->getSubmodule("fog");
     if (!fogHost) return;
     EdgeTrustFogApp* fogApp = dynamic_cast<EdgeTrustFogApp*>(fogHost);
     if (!fogApp) {
@@ -829,7 +866,7 @@ void EdgeTrustRSUApp::reportToFog(const std::vector<InterRSUDigestEntry>& digest
 
     totalFogSyncsSent++;
     EV_INFO << "[t=" << simTime() << "s] [EDGE-TO-FOG UPLINK] RSU " << rsuId
-            << " reporting " << digest.size() << " vehicle digests to Regional Fog Layer." << endl;
+            << " reporting " << digest.size() << " vehicle digests to Regional Fog Layer Cluster " << fogId << "." << endl;
     fogApp->receiveRSUDigest(rsuId, digest);
 }
 
@@ -837,7 +874,8 @@ void EdgeTrustRSUApp::reportThreatToFog(int offendingNodeId, int attackType, dou
 {
     cModule* parent = findHost()->getParentModule();
     if (!parent) return;
-    cModule* fogHost = parent->getSubmodule("fog");
+    cModule* fogHost = parent->getSubmodule("fog", fogId);
+    if (!fogHost) fogHost = parent->getSubmodule("fog");
     if (!fogHost) return;
     EdgeTrustFogApp* fogApp = dynamic_cast<EdgeTrustFogApp*>(fogHost);
     if (!fogApp) {
@@ -846,12 +884,13 @@ void EdgeTrustRSUApp::reportThreatToFog(int offendingNodeId, int attackType, dou
     if (!fogApp) return;
 
     EV_WARN << "[t=" << simTime() << "s] [EDGE-TO-FOG URGENT ALERT] RSU " << rsuId
-            << " forwarding Threat Incident (Node " << offendingNodeId << ") to Regional Fog Layer." << endl;
+            << " forwarding Threat Incident (Node " << offendingNodeId << ") to Regional Fog Layer Cluster " << fogId << "." << endl;
     fogApp->receiveRSUThreatAlert(rsuId, offendingNodeId, attackType, confidence, reason);
 }
 
 void EdgeTrustRSUApp::receiveFogMasterDigest(const std::vector<FogMasterDigestEntry>& masterDigest)
 {
+    Enter_Method_Silent();
     totalFogMasterSyncsReceived++;
     int prewarmed = 0;
     int aligned = 0;
@@ -898,6 +937,7 @@ void EdgeTrustRSUApp::receiveFogMasterDigest(const std::vector<FogMasterDigestEn
 
 void EdgeTrustRSUApp::receiveFogRevocation(int offendingNodeId, int attackType, double confidence, const std::string& reason)
 {
+    Enter_Method_Silent();
     totalFogRevocationsReceived++;
     quarantinedNodes.insert(offendingNodeId);
 
@@ -1238,6 +1278,195 @@ bool EdgeTrustRSUApp::loadCheckpoint(const std::string& filepath)
     return (loadedCount > 0);
 }
 
+void EdgeTrustRSUApp::sendSDNTransitPacket()
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+
+    totalSDNPacketsOriginated++;
+    // RSUs 0 and 1 (Grid 1) route transit safety alerts to RSUs 2 and 3 (Grid 2).
+    // RSUs 2 and 3 (Grid 2) route transit safety alerts to RSUs 0 and 1 (Grid 1).
+    int targetRsu = (rsuId < 2) ? (2 + (sdnPacketSequence % 2)) : (0 + (sdnPacketSequence % 2));
+
+    EdgeTrustSDNPacket* sdnPkt = new EdgeTrustSDNPacket("SDN_SAFETY_TRANSIT");
+    sdnPkt->setSourceRsuId(rsuId);
+    sdnPkt->setDestRsuId(targetRsu);
+    sdnPkt->setCurrentHop(0);
+    // Alternate traffic classes: Class 0 (Safety Critical: 80%), Class 1 (Trust Sync: 20%)
+    int tc = (sdnPacketSequence % 5 == 0) ? 1 : 0;
+    sdnPkt->setTrafficClass(tc);
+    sdnPkt->setPacketId(++sdnPacketSequence);
+    sdnPkt->setGenerationTime(simTime());
+    sdnPkt->setIsDetour(false);
+    sdnPkt->setPayloadType(tc == 0 ? "CROSS_GRID_EMERGENCY_ADVISORY" : "TRUST_REGIONAL_SYNC");
+    sdnPkt->setOriginVehicleId(rsuId * 100 + sdnPacketSequence);
+    sdnPkt->setSafetyUrgency(tc == 0 ? 1.0 : 0.5);
+
+    // Enqueue into priority queue
+    if (tc == 0) {
+        sdnHighPriorityQueue.push(sdnPkt);
+    } else if (tc == 1) {
+        sdnNormalPriorityQueue.push(sdnPkt);
+    } else {
+        sdnBestEffortQueue.push(sdnPkt);
+    }
+
+    processSDNQoSTransmission();
+}
+
+void EdgeTrustRSUApp::processSDNQoSTransmission()
+{
+    // Strict QoS Priority Scheduling
+    while (!sdnHighPriorityQueue.empty()) {
+        EdgeTrustSDNPacket* pkt = sdnHighPriorityQueue.front();
+        sdnHighPriorityQueue.pop();
+        forwardSDNPacket(pkt);
+    }
+
+    while (!sdnNormalPriorityQueue.empty()) {
+        EdgeTrustSDNPacket* pkt = sdnNormalPriorityQueue.front();
+        sdnNormalPriorityQueue.pop();
+        forwardSDNPacket(pkt);
+    }
+
+    while (!sdnBestEffortQueue.empty()) {
+        EdgeTrustSDNPacket* pkt = sdnBestEffortQueue.front();
+        sdnBestEffortQueue.pop();
+        forwardSDNPacket(pkt);
+    }
+}
+
+void EdgeTrustRSUApp::forwardSDNPacket(EdgeTrustSDNPacket* pkt)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) {
+        delete pkt;
+        return;
+    }
+
+    cModule* sdnMod = parent->getSubmodule("sdn");
+    EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+
+    bool isDetour = false;
+    std::vector<int> fullPath;
+    int nextHop = defaultPeerRsuId;
+
+    if (sdn) {
+        nextHop = sdn->resolveNextHop(rsuId, pkt->getDestRsuId(), pkt->getTrafficClass(), isDetour, fullPath);
+    }
+
+    if (isDetour) {
+        pkt->setIsDetour(true);
+        totalSDNDetoursExecuted++;
+    }
+
+    std::stringstream pathStr;
+    for (size_t i = 0; i < fullPath.size(); ++i) {
+        pathStr << fullPath[i];
+        if (i + 1 < fullPath.size()) pathStr << "->";
+    }
+    pkt->setRoutePath(pathStr.str().c_str());
+
+    if (nextHop == rsuId || nextHop < 0) {
+        receiveSDNPacket(pkt);
+        return;
+    }
+
+    cModule* nextHost = parent->getSubmodule("rsu", nextHop);
+    if (!nextHost) {
+        delete pkt;
+        return;
+    }
+
+    EdgeTrustRSUApp* nextApp = dynamic_cast<EdgeTrustRSUApp*>(nextHost->getSubmodule("appl"));
+    if (!nextApp) {
+        delete pkt;
+        return;
+    }
+
+    totalSDNPacketsForwarded++;
+
+    EV_INFO << "============================================================" << endl;
+    EV_INFO << " [t=" << simTime() << "s] [SDN ADAPTIVE FORWARD] RSU " << rsuId
+            << " ===> NextHop RSU " << nextHop << endl;
+    EV_INFO << "   -> Final Destination: RSU " << pkt->getDestRsuId() << endl;
+    EV_INFO << "   -> QoS Traffic Class: " << (pkt->getTrafficClass() == 0 ? "Class 0 (SAFETY_CRITICAL)" : "Class 1 (TRUST_CONTROL)") << endl;
+    EV_INFO << "   -> Routing Strategy: " << (isDetour ? "TRUST-ADAPTIVE DETOUR (Compromised Direct Link Bypassed!)" : "Direct Optimal Shortest Path") << endl;
+    EV_INFO << "   -> Calculated Path: [" << pathStr.str() << "]" << endl;
+    EV_INFO << "============================================================" << endl;
+
+    Coord curPos = curPosition;
+    Coord nextPos = nextApp->curPosition;
+    std::string arrowColor = isDetour ? "darkorange" : "dodgerblue";
+    addTransmissionArrow(curPos, nextPos, arrowColor);
+
+    nextApp->receiveSDNPacket(pkt);
+}
+
+void EdgeTrustRSUApp::receiveSDNPacket(EdgeTrustSDNPacket* pkt)
+{
+    Enter_Method_Silent();
+    if (pkt) {
+        take(pkt);
+    }
+    if (pkt->getDestRsuId() == rsuId) {
+        totalSDNPacketsDelivered++;
+        simtime_t latency = simTime() - pkt->getGenerationTime();
+
+        EV_INFO << "============================================================" << endl;
+        EV_INFO << " [t=" << simTime() << "s] [SDN PACKET DELIVERED] RSU " << rsuId << endl;
+        EV_INFO << "   -> Packet ID: #" << pkt->getPacketId() << " | Origin: RSU " << pkt->getSourceRsuId() << endl;
+        EV_INFO << "   -> Delivery Path: " << pkt->getRoutePath() << endl;
+        EV_INFO << "   -> Routing Type: " << (pkt->isDetour() ? "TRUST-ADAPTIVE DETOUR (SUCCESSFULLY BYPASSED ATTACK)" : "Direct Optimal Path") << endl;
+        EV_INFO << "   -> End-to-End Latency: " << std::fixed << std::setprecision(3) << (latency.dbl() * 1000.0) << " ms" << endl;
+        EV_INFO << "   -> Local Action: Safety Preemption Broadcast to Local Vehicle Fleet" << endl;
+        EV_INFO << "============================================================" << endl;
+
+        cModule* parent = findHost()->getParentModule();
+        if (parent) {
+            cModule* sdnMod = parent->getSubmodule("sdn");
+            if (sdnMod) {
+                EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+                if (sdn) {
+                    sdn->reportDeliveryOutcome(pkt->getSourceRsuId(), rsuId, pkt->getTrafficClass(), true, latency.dbl(), pkt->isDetour());
+                }
+            }
+        }
+
+        broadcastSafetyAdvisory(pkt->getOriginVehicleId(), "WARN", 0.98);
+        delete pkt;
+    } else {
+        pkt->setCurrentHop(pkt->getCurrentHop() + 1);
+
+        EV_INFO << "[t=" << simTime() << "s] [SDN INTERMEDIATE HOP] RSU " << rsuId
+                << " transit forwarding Packet #" << pkt->getPacketId()
+                << " en-route to Final Dest RSU " << pkt->getDestRsuId() << endl;
+
+        if (pkt->getTrafficClass() == 0) {
+            sdnHighPriorityQueue.push(pkt);
+        } else if (pkt->getTrafficClass() == 1) {
+            sdnNormalPriorityQueue.push(pkt);
+        } else {
+            sdnBestEffortQueue.push(pkt);
+        }
+
+        processSDNQoSTransmission();
+    }
+}
+
+void EdgeTrustRSUApp::reportLinkStatsToSDN(int neighborRsuId, double pdr, double latencyMs)
+{
+    cModule* parent = findHost()->getParentModule();
+    if (!parent) return;
+    cModule* sdnMod = parent->getSubmodule("sdn");
+    if (!sdnMod) return;
+    EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+    if (!sdn) return;
+
+    double linkTrust = (quarantinedNodes.empty()) ? 1.0 : 0.85;
+    sdn->updateLinkMetrics(rsuId, neighborRsuId, linkTrust, pdr, latencyMs, 0.05);
+}
+
 void EdgeTrustRSUApp::finish()
 {
     clearTransmissionArrows();
@@ -1253,6 +1482,24 @@ void EdgeTrustRSUApp::finish()
         cancelAndDelete(interRsuSyncTimerMsg);
         interRsuSyncTimerMsg = nullptr;
     }
+    if (sdnPacketTimerMsg) {
+        cancelAndDelete(sdnPacketTimerMsg);
+        sdnPacketTimerMsg = nullptr;
+    }
+
+    while (!sdnHighPriorityQueue.empty()) {
+        delete sdnHighPriorityQueue.front();
+        sdnHighPriorityQueue.pop();
+    }
+    while (!sdnNormalPriorityQueue.empty()) {
+        delete sdnNormalPriorityQueue.front();
+        sdnNormalPriorityQueue.pop();
+    }
+    while (!sdnBestEffortQueue.empty()) {
+        delete sdnBestEffortQueue.front();
+        sdnBestEffortQueue.pop();
+    }
+
     DemoBaseApplLayer::finish();
     EV_INFO << "EdgeTrust RSU " << rsuId << " finished. Extracted records: "
             << totalExtractedRecords << " | I2I Syncs [Sent: " << totalI2ISyncsSent
@@ -1260,7 +1507,12 @@ void EdgeTrustRSUApp::finish()
             << totalI2IAlertsSent << ", Recv: " << totalI2IAlertsReceived
             << "] | Fog Uplinks: " << totalFogSyncsSent
             << " | Fog Master Recv: " << totalFogMasterSyncsReceived
-            << " | Fog Revocations: " << totalFogRevocationsReceived << endl;
+            << " | Fog Revocations: " << totalFogRevocationsReceived
+            << " | SDN Transit [Originated: " << totalSDNPacketsOriginated
+            << ", Forwarded: " << totalSDNPacketsForwarded
+            << ", Delivered: " << totalSDNPacketsDelivered
+            << ", Detours: " << totalSDNDetoursExecuted << "]" << endl;
+
     recordScalar("edgeTrust_extractedRecords", totalExtractedRecords);
     recordScalar("edgeTrust_i2iSyncsSent", totalI2ISyncsSent);
     recordScalar("edgeTrust_i2iSyncsReceived", totalI2ISyncsReceived);
@@ -1269,6 +1521,10 @@ void EdgeTrustRSUApp::finish()
     recordScalar("edgeTrust_fogSyncsSent", totalFogSyncsSent);
     recordScalar("edgeTrust_fogMasterSyncsReceived", totalFogMasterSyncsReceived);
     recordScalar("edgeTrust_fogRevocationsReceived", totalFogRevocationsReceived);
+    recordScalar("edgeTrust_sdnPacketsOriginated", totalSDNPacketsOriginated);
+    recordScalar("edgeTrust_sdnPacketsForwarded", totalSDNPacketsForwarded);
+    recordScalar("edgeTrust_sdnPacketsDelivered", totalSDNPacketsDelivered);
+    recordScalar("edgeTrust_sdnDetoursExecuted", totalSDNDetoursExecuted);
 }
 
 } // namespace veins

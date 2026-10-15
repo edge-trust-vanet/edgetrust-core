@@ -31,6 +31,7 @@
 namespace veins {
 
 class EdgeTrustSafetyMessage;
+class EdgeTrustSDNPacket;
 
 }  // namespace veins
 
@@ -107,6 +108,92 @@ class VEINS_API EdgeTrustSafetyMessage : public ::veins::DemoSafetyMessage
 inline void doParsimPacking(omnetpp::cCommBuffer *b, const EdgeTrustSafetyMessage& obj) {obj.parsimPack(b);}
 inline void doParsimUnpacking(omnetpp::cCommBuffer *b, EdgeTrustSafetyMessage& obj) {obj.parsimUnpack(b);}
 
+/**
+ * Class generated from <tt>veins/modules/application/edgetrust/EdgeTrustSafetyMessage.msg:19</tt> by opp_msgtool.
+ * <pre>
+ * packet EdgeTrustSDNPacket extends cPacket
+ * {
+ *     int sourceRsuId = 0;
+ *     int destRsuId = 0;
+ *     int currentHop = 0;
+ *     int trafficClass = 0; // 0=Safety Critical (High), 1=Trust/Control (Med), 2=Best Effort (Low)
+ *     int packetId = 0;
+ *     simtime_t generationTime = 0;
+ *     bool isDetour = false;
+ *     string payloadType = "SAFETY_ALERT";
+ *     string routePath = "";
+ *     int originVehicleId = 0;
+ *     double safetyUrgency = 1.0;
+ * }
+ * </pre>
+ */
+class VEINS_API EdgeTrustSDNPacket : public ::omnetpp::cPacket
+{
+  protected:
+    int sourceRsuId = 0;
+    int destRsuId = 0;
+    int currentHop = 0;
+    int trafficClass = 0;
+    int packetId = 0;
+    ::omnetpp::simtime_t generationTime = 0;
+    bool isDetour_ = false;
+    ::omnetpp::opp_string payloadType = "SAFETY_ALERT";
+    ::omnetpp::opp_string routePath = "";
+    int originVehicleId = 0;
+    double safetyUrgency = 1.0;
+
+  private:
+    void copy(const EdgeTrustSDNPacket& other);
+
+  protected:
+    bool operator==(const EdgeTrustSDNPacket&) = delete;
+
+  public:
+    EdgeTrustSDNPacket(const char *name=nullptr, short kind=0);
+    EdgeTrustSDNPacket(const EdgeTrustSDNPacket& other);
+    virtual ~EdgeTrustSDNPacket();
+    EdgeTrustSDNPacket& operator=(const EdgeTrustSDNPacket& other);
+    virtual EdgeTrustSDNPacket *dup() const override {return new EdgeTrustSDNPacket(*this);}
+    virtual void parsimPack(omnetpp::cCommBuffer *b) const override;
+    virtual void parsimUnpack(omnetpp::cCommBuffer *b) override;
+
+    virtual int getSourceRsuId() const;
+    virtual void setSourceRsuId(int sourceRsuId);
+
+    virtual int getDestRsuId() const;
+    virtual void setDestRsuId(int destRsuId);
+
+    virtual int getCurrentHop() const;
+    virtual void setCurrentHop(int currentHop);
+
+    virtual int getTrafficClass() const;
+    virtual void setTrafficClass(int trafficClass);
+
+    virtual int getPacketId() const;
+    virtual void setPacketId(int packetId);
+
+    virtual ::omnetpp::simtime_t getGenerationTime() const;
+    virtual void setGenerationTime(::omnetpp::simtime_t generationTime);
+
+    virtual bool isDetour() const;
+    virtual void setIsDetour(bool isDetour);
+
+    virtual const char * getPayloadType() const;
+    virtual void setPayloadType(const char * payloadType);
+
+    virtual const char * getRoutePath() const;
+    virtual void setRoutePath(const char * routePath);
+
+    virtual int getOriginVehicleId() const;
+    virtual void setOriginVehicleId(int originVehicleId);
+
+    virtual double getSafetyUrgency() const;
+    virtual void setSafetyUrgency(double safetyUrgency);
+};
+
+inline void doParsimPacking(omnetpp::cCommBuffer *b, const EdgeTrustSDNPacket& obj) {obj.parsimPack(b);}
+inline void doParsimUnpacking(omnetpp::cCommBuffer *b, EdgeTrustSDNPacket& obj) {obj.parsimUnpack(b);}
+
 
 }  // namespace veins
 
@@ -114,6 +201,7 @@ inline void doParsimUnpacking(omnetpp::cCommBuffer *b, EdgeTrustSafetyMessage& o
 namespace omnetpp {
 
 template<> inline veins::EdgeTrustSafetyMessage *fromAnyPtr(any_ptr ptr) { return check_and_cast<veins::EdgeTrustSafetyMessage*>(ptr.get<cObject>()); }
+template<> inline veins::EdgeTrustSDNPacket *fromAnyPtr(any_ptr ptr) { return check_and_cast<veins::EdgeTrustSDNPacket*>(ptr.get<cObject>()); }
 
 }  // namespace omnetpp
 

@@ -14,6 +14,7 @@ namespace veins {
 // Forward declarations
 struct InterRSUDigestEntry;
 class EdgeTrustRSUApp;
+class EdgeTrustSDNController;
 
 /**
  * @brief Telemetry observation recorded by a specific RSU for a vehicle.
@@ -94,6 +95,7 @@ struct FogMasterDigestEntry {
  * 
  * Aggregates multi-RSU trust digests, resolves duplicate/stale/conflicting trust updates,
  * correlates multi-intersection distributed attacks, maintains the persistent regional ledger,
+ * synchronizes with peer Fog nodes, interfaces with Tier-4 SDN Controller,
  * and distributes Certificate Revocation List (CRL) blacklist orders to all intersection RSUs.
  */
 class VEINS_API EdgeTrustFogApp : public omnetpp::cSimpleModule {
@@ -104,6 +106,10 @@ class VEINS_API EdgeTrustFogApp : public omnetpp::cSimpleModule {
     // Interface called by RSUs
     virtual void receiveRSUDigest(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest);
     virtual void receiveRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason);
+
+    // Interface for Inter-Fog Communication
+    virtual void receiveInterFogDigest(int sourceFogId, const std::vector<FogMasterDigestEntry>& digest);
+    virtual void receiveInterFogRevocation(int sourceFogId, int offendingNodeId, int attackType, double confidence, const std::string& reason);
 
     // Monitoring getters
     int getTrackedVehicleCount() const { return static_cast<int>(regionalLedger.size()); }
@@ -121,6 +127,8 @@ class VEINS_API EdgeTrustFogApp : public omnetpp::cSimpleModule {
     virtual void reconcileConflictsForNode(FogVehicleRecord& rec, int newRsuId, const InterRSUDigestEntry& entry);
     virtual void triggerRegionalRevocation(int nodeId, int attackType, double confidence, const std::string& reason);
     virtual void pushRegionalMasterDigest();
+    virtual void sendInterFogSync();
+    virtual void reportToSDN();
 
     // Checkpointing
     virtual void saveCheckpoint(const std::string& filepath);
@@ -142,6 +150,11 @@ class VEINS_API EdgeTrustFogApp : public omnetpp::cSimpleModule {
     double posX = 118.0;
     double posY = 15.0;
     double posZ = 10.0;
+    int managedRsuOffset = 0;
+    int managedRsuCount = 2;
+    int peerFogId = 1;
+    bool enableInterFog = true;
+    bool enableSDNIntegration = true;
 
     // Timers
     omnetpp::cMessage* fogSyncTimerMsg = nullptr;
@@ -158,6 +171,10 @@ class VEINS_API EdgeTrustFogApp : public omnetpp::cSimpleModule {
     int totalRevocationsIssued = 0;
     int totalMasterSyncsDispatched = 0;
     int totalCrossIntersectionAttacksDetected = 0;
+    int totalInterFogSyncsSent = 0;
+    int totalInterFogSyncsReceived = 0;
+    int totalInterFogRevocationsSent = 0;
+    int totalInterFogRevocationsReceived = 0;
 };
 
 } // namespace veins

@@ -672,6 +672,593 @@ void EdgeTrustSafetyMessageDescriptor::setFieldStructValuePointer(omnetpp::any_p
     }
 }
 
+Register_Class(EdgeTrustSDNPacket)
+
+EdgeTrustSDNPacket::EdgeTrustSDNPacket(const char *name, short kind) : ::omnetpp::cPacket(name, kind)
+{
+}
+
+EdgeTrustSDNPacket::EdgeTrustSDNPacket(const EdgeTrustSDNPacket& other) : ::omnetpp::cPacket(other)
+{
+    copy(other);
+}
+
+EdgeTrustSDNPacket::~EdgeTrustSDNPacket()
+{
+}
+
+EdgeTrustSDNPacket& EdgeTrustSDNPacket::operator=(const EdgeTrustSDNPacket& other)
+{
+    if (this == &other) return *this;
+    ::omnetpp::cPacket::operator=(other);
+    copy(other);
+    return *this;
+}
+
+void EdgeTrustSDNPacket::copy(const EdgeTrustSDNPacket& other)
+{
+    this->sourceRsuId = other.sourceRsuId;
+    this->destRsuId = other.destRsuId;
+    this->currentHop = other.currentHop;
+    this->trafficClass = other.trafficClass;
+    this->packetId = other.packetId;
+    this->generationTime = other.generationTime;
+    this->isDetour_ = other.isDetour_;
+    this->payloadType = other.payloadType;
+    this->routePath = other.routePath;
+    this->originVehicleId = other.originVehicleId;
+    this->safetyUrgency = other.safetyUrgency;
+}
+
+void EdgeTrustSDNPacket::parsimPack(omnetpp::cCommBuffer *b) const
+{
+    ::omnetpp::cPacket::parsimPack(b);
+    doParsimPacking(b,this->sourceRsuId);
+    doParsimPacking(b,this->destRsuId);
+    doParsimPacking(b,this->currentHop);
+    doParsimPacking(b,this->trafficClass);
+    doParsimPacking(b,this->packetId);
+    doParsimPacking(b,this->generationTime);
+    doParsimPacking(b,this->isDetour_);
+    doParsimPacking(b,this->payloadType);
+    doParsimPacking(b,this->routePath);
+    doParsimPacking(b,this->originVehicleId);
+    doParsimPacking(b,this->safetyUrgency);
+}
+
+void EdgeTrustSDNPacket::parsimUnpack(omnetpp::cCommBuffer *b)
+{
+    ::omnetpp::cPacket::parsimUnpack(b);
+    doParsimUnpacking(b,this->sourceRsuId);
+    doParsimUnpacking(b,this->destRsuId);
+    doParsimUnpacking(b,this->currentHop);
+    doParsimUnpacking(b,this->trafficClass);
+    doParsimUnpacking(b,this->packetId);
+    doParsimUnpacking(b,this->generationTime);
+    doParsimUnpacking(b,this->isDetour_);
+    doParsimUnpacking(b,this->payloadType);
+    doParsimUnpacking(b,this->routePath);
+    doParsimUnpacking(b,this->originVehicleId);
+    doParsimUnpacking(b,this->safetyUrgency);
+}
+
+int EdgeTrustSDNPacket::getSourceRsuId() const
+{
+    return this->sourceRsuId;
+}
+
+void EdgeTrustSDNPacket::setSourceRsuId(int sourceRsuId)
+{
+    this->sourceRsuId = sourceRsuId;
+}
+
+int EdgeTrustSDNPacket::getDestRsuId() const
+{
+    return this->destRsuId;
+}
+
+void EdgeTrustSDNPacket::setDestRsuId(int destRsuId)
+{
+    this->destRsuId = destRsuId;
+}
+
+int EdgeTrustSDNPacket::getCurrentHop() const
+{
+    return this->currentHop;
+}
+
+void EdgeTrustSDNPacket::setCurrentHop(int currentHop)
+{
+    this->currentHop = currentHop;
+}
+
+int EdgeTrustSDNPacket::getTrafficClass() const
+{
+    return this->trafficClass;
+}
+
+void EdgeTrustSDNPacket::setTrafficClass(int trafficClass)
+{
+    this->trafficClass = trafficClass;
+}
+
+int EdgeTrustSDNPacket::getPacketId() const
+{
+    return this->packetId;
+}
+
+void EdgeTrustSDNPacket::setPacketId(int packetId)
+{
+    this->packetId = packetId;
+}
+
+::omnetpp::simtime_t EdgeTrustSDNPacket::getGenerationTime() const
+{
+    return this->generationTime;
+}
+
+void EdgeTrustSDNPacket::setGenerationTime(::omnetpp::simtime_t generationTime)
+{
+    this->generationTime = generationTime;
+}
+
+bool EdgeTrustSDNPacket::isDetour() const
+{
+    return this->isDetour_;
+}
+
+void EdgeTrustSDNPacket::setIsDetour(bool isDetour)
+{
+    this->isDetour_ = isDetour;
+}
+
+const char * EdgeTrustSDNPacket::getPayloadType() const
+{
+    return this->payloadType.c_str();
+}
+
+void EdgeTrustSDNPacket::setPayloadType(const char * payloadType)
+{
+    this->payloadType = payloadType;
+}
+
+const char * EdgeTrustSDNPacket::getRoutePath() const
+{
+    return this->routePath.c_str();
+}
+
+void EdgeTrustSDNPacket::setRoutePath(const char * routePath)
+{
+    this->routePath = routePath;
+}
+
+int EdgeTrustSDNPacket::getOriginVehicleId() const
+{
+    return this->originVehicleId;
+}
+
+void EdgeTrustSDNPacket::setOriginVehicleId(int originVehicleId)
+{
+    this->originVehicleId = originVehicleId;
+}
+
+double EdgeTrustSDNPacket::getSafetyUrgency() const
+{
+    return this->safetyUrgency;
+}
+
+void EdgeTrustSDNPacket::setSafetyUrgency(double safetyUrgency)
+{
+    this->safetyUrgency = safetyUrgency;
+}
+
+class EdgeTrustSDNPacketDescriptor : public omnetpp::cClassDescriptor
+{
+  private:
+    mutable const char **propertyNames;
+    enum FieldConstants {
+        FIELD_sourceRsuId,
+        FIELD_destRsuId,
+        FIELD_currentHop,
+        FIELD_trafficClass,
+        FIELD_packetId,
+        FIELD_generationTime,
+        FIELD_isDetour,
+        FIELD_payloadType,
+        FIELD_routePath,
+        FIELD_originVehicleId,
+        FIELD_safetyUrgency,
+    };
+  public:
+    EdgeTrustSDNPacketDescriptor();
+    virtual ~EdgeTrustSDNPacketDescriptor();
+
+    virtual bool doesSupport(omnetpp::cObject *obj) const override;
+    virtual const char **getPropertyNames() const override;
+    virtual const char *getProperty(const char *propertyName) const override;
+    virtual std::string getValueAsString(omnetpp::any_ptr object) const override;
+    virtual void setValueAsString(omnetpp::any_ptr object, const char *value) const override;
+    virtual int getFieldCount() const override;
+    virtual const char *getFieldName(int field) const override;
+    virtual int findField(const char *fieldName) const override;
+    virtual unsigned int getFieldTypeFlags(int field) const override;
+    virtual const char *getFieldTypeString(int field) const override;
+    virtual const char **getFieldPropertyNames(int field) const override;
+    virtual const char *getFieldProperty(int field, const char *propertyName) const override;
+    virtual int getFieldArraySize(omnetpp::any_ptr object, int field) const override;
+    virtual void setFieldArraySize(omnetpp::any_ptr object, int field, int size) const override;
+
+    virtual const char *getFieldDynamicTypeString(omnetpp::any_ptr object, int field, int i) const override;
+    virtual std::string getFieldValueAsString(omnetpp::any_ptr object, int field, int i) const override;
+    virtual void setFieldValueAsString(omnetpp::any_ptr object, int field, int i, const char *value) const override;
+    virtual omnetpp::cValue getFieldValue(omnetpp::any_ptr object, int field, int i) const override;
+    virtual void setFieldValue(omnetpp::any_ptr object, int field, int i, const omnetpp::cValue& value) const override;
+
+    virtual const char *getFieldStructName(int field) const override;
+    virtual omnetpp::any_ptr getFieldStructValuePointer(omnetpp::any_ptr object, int field, int i) const override;
+    virtual void setFieldStructValuePointer(omnetpp::any_ptr object, int field, int i, omnetpp::any_ptr ptr) const override;
+};
+
+Register_ClassDescriptor(EdgeTrustSDNPacketDescriptor)
+
+EdgeTrustSDNPacketDescriptor::EdgeTrustSDNPacketDescriptor() : omnetpp::cClassDescriptor(omnetpp::opp_typename(typeid(veins::EdgeTrustSDNPacket)), "omnetpp::cPacket")
+{
+    propertyNames = nullptr;
+}
+
+EdgeTrustSDNPacketDescriptor::~EdgeTrustSDNPacketDescriptor()
+{
+    delete[] propertyNames;
+}
+
+bool EdgeTrustSDNPacketDescriptor::doesSupport(omnetpp::cObject *obj) const
+{
+    return dynamic_cast<EdgeTrustSDNPacket *>(obj)!=nullptr;
+}
+
+const char **EdgeTrustSDNPacketDescriptor::getPropertyNames() const
+{
+    if (!propertyNames) {
+        static const char *names[] = {  nullptr };
+        omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+        const char **baseNames = base ? base->getPropertyNames() : nullptr;
+        propertyNames = mergeLists(baseNames, names);
+    }
+    return propertyNames;
+}
+
+const char *EdgeTrustSDNPacketDescriptor::getProperty(const char *propertyName) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    return base ? base->getProperty(propertyName) : nullptr;
+}
+
+std::string EdgeTrustSDNPacketDescriptor::getValueAsString(omnetpp::any_ptr object) const
+{
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    return ((cObject*)pp)->str();
+}
+
+void EdgeTrustSDNPacketDescriptor::setValueAsString(omnetpp::any_ptr object, const char *value) const
+{
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    if (!fromStringIfExtractable(*pp, value))
+        cClassDescriptor::setValueAsString(object, value);
+}
+
+int EdgeTrustSDNPacketDescriptor::getFieldCount() const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    return base ? 11+base->getFieldCount() : 11;
+}
+
+unsigned int EdgeTrustSDNPacketDescriptor::getFieldTypeFlags(int field) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldTypeFlags(field);
+        field -= base->getFieldCount();
+    }
+    static unsigned int fieldTypeFlags[] = {
+        FD_ISEDITABLE,    // FIELD_sourceRsuId
+        FD_ISEDITABLE,    // FIELD_destRsuId
+        FD_ISEDITABLE,    // FIELD_currentHop
+        FD_ISEDITABLE,    // FIELD_trafficClass
+        FD_ISEDITABLE,    // FIELD_packetId
+        FD_ISEDITABLE,    // FIELD_generationTime
+        FD_ISEDITABLE,    // FIELD_isDetour
+        FD_ISEDITABLE,    // FIELD_payloadType
+        FD_ISEDITABLE,    // FIELD_routePath
+        FD_ISEDITABLE,    // FIELD_originVehicleId
+        FD_ISEDITABLE,    // FIELD_safetyUrgency
+    };
+    return (field >= 0 && field < 11) ? fieldTypeFlags[field] : 0;
+}
+
+const char *EdgeTrustSDNPacketDescriptor::getFieldName(int field) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldName(field);
+        field -= base->getFieldCount();
+    }
+    static const char *fieldNames[] = {
+        "sourceRsuId",
+        "destRsuId",
+        "currentHop",
+        "trafficClass",
+        "packetId",
+        "generationTime",
+        "isDetour",
+        "payloadType",
+        "routePath",
+        "originVehicleId",
+        "safetyUrgency",
+    };
+    return (field >= 0 && field < 11) ? fieldNames[field] : nullptr;
+}
+
+int EdgeTrustSDNPacketDescriptor::findField(const char *fieldName) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    int baseIndex = base ? base->getFieldCount() : 0;
+    if (strcmp(fieldName, "sourceRsuId") == 0) return baseIndex + 0;
+    if (strcmp(fieldName, "destRsuId") == 0) return baseIndex + 1;
+    if (strcmp(fieldName, "currentHop") == 0) return baseIndex + 2;
+    if (strcmp(fieldName, "trafficClass") == 0) return baseIndex + 3;
+    if (strcmp(fieldName, "packetId") == 0) return baseIndex + 4;
+    if (strcmp(fieldName, "generationTime") == 0) return baseIndex + 5;
+    if (strcmp(fieldName, "isDetour") == 0) return baseIndex + 6;
+    if (strcmp(fieldName, "payloadType") == 0) return baseIndex + 7;
+    if (strcmp(fieldName, "routePath") == 0) return baseIndex + 8;
+    if (strcmp(fieldName, "originVehicleId") == 0) return baseIndex + 9;
+    if (strcmp(fieldName, "safetyUrgency") == 0) return baseIndex + 10;
+    return base ? base->findField(fieldName) : -1;
+}
+
+const char *EdgeTrustSDNPacketDescriptor::getFieldTypeString(int field) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldTypeString(field);
+        field -= base->getFieldCount();
+    }
+    static const char *fieldTypeStrings[] = {
+        "int",    // FIELD_sourceRsuId
+        "int",    // FIELD_destRsuId
+        "int",    // FIELD_currentHop
+        "int",    // FIELD_trafficClass
+        "int",    // FIELD_packetId
+        "omnetpp::simtime_t",    // FIELD_generationTime
+        "bool",    // FIELD_isDetour
+        "string",    // FIELD_payloadType
+        "string",    // FIELD_routePath
+        "int",    // FIELD_originVehicleId
+        "double",    // FIELD_safetyUrgency
+    };
+    return (field >= 0 && field < 11) ? fieldTypeStrings[field] : nullptr;
+}
+
+const char **EdgeTrustSDNPacketDescriptor::getFieldPropertyNames(int field) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldPropertyNames(field);
+        field -= base->getFieldCount();
+    }
+    switch (field) {
+        default: return nullptr;
+    }
+}
+
+const char *EdgeTrustSDNPacketDescriptor::getFieldProperty(int field, const char *propertyName) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldProperty(field, propertyName);
+        field -= base->getFieldCount();
+    }
+    switch (field) {
+        default: return nullptr;
+    }
+}
+
+int EdgeTrustSDNPacketDescriptor::getFieldArraySize(omnetpp::any_ptr object, int field) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldArraySize(object, field);
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        default: return 0;
+    }
+}
+
+void EdgeTrustSDNPacketDescriptor::setFieldArraySize(omnetpp::any_ptr object, int field, int size) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount()){
+            base->setFieldArraySize(object, field, size);
+            return;
+        }
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        default: throw omnetpp::cRuntimeError("Cannot set array size of field %d of class 'EdgeTrustSDNPacket'", field);
+    }
+}
+
+const char *EdgeTrustSDNPacketDescriptor::getFieldDynamicTypeString(omnetpp::any_ptr object, int field, int i) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldDynamicTypeString(object,field,i);
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        default: return nullptr;
+    }
+}
+
+std::string EdgeTrustSDNPacketDescriptor::getFieldValueAsString(omnetpp::any_ptr object, int field, int i) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldValueAsString(object,field,i);
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        case FIELD_sourceRsuId: return long2string(pp->getSourceRsuId());
+        case FIELD_destRsuId: return long2string(pp->getDestRsuId());
+        case FIELD_currentHop: return long2string(pp->getCurrentHop());
+        case FIELD_trafficClass: return long2string(pp->getTrafficClass());
+        case FIELD_packetId: return long2string(pp->getPacketId());
+        case FIELD_generationTime: return simtime2string(pp->getGenerationTime());
+        case FIELD_isDetour: return bool2string(pp->isDetour());
+        case FIELD_payloadType: return oppstring2string(pp->getPayloadType());
+        case FIELD_routePath: return oppstring2string(pp->getRoutePath());
+        case FIELD_originVehicleId: return long2string(pp->getOriginVehicleId());
+        case FIELD_safetyUrgency: return double2string(pp->getSafetyUrgency());
+        default: return "";
+    }
+}
+
+void EdgeTrustSDNPacketDescriptor::setFieldValueAsString(omnetpp::any_ptr object, int field, int i, const char *value) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount()){
+            base->setFieldValueAsString(object, field, i, value);
+            return;
+        }
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        case FIELD_sourceRsuId: pp->setSourceRsuId(string2long(value)); break;
+        case FIELD_destRsuId: pp->setDestRsuId(string2long(value)); break;
+        case FIELD_currentHop: pp->setCurrentHop(string2long(value)); break;
+        case FIELD_trafficClass: pp->setTrafficClass(string2long(value)); break;
+        case FIELD_packetId: pp->setPacketId(string2long(value)); break;
+        case FIELD_generationTime: pp->setGenerationTime(string2simtime(value)); break;
+        case FIELD_isDetour: pp->setIsDetour(string2bool(value)); break;
+        case FIELD_payloadType: pp->setPayloadType((value)); break;
+        case FIELD_routePath: pp->setRoutePath((value)); break;
+        case FIELD_originVehicleId: pp->setOriginVehicleId(string2long(value)); break;
+        case FIELD_safetyUrgency: pp->setSafetyUrgency(string2double(value)); break;
+        default: throw omnetpp::cRuntimeError("Cannot set field %d of class 'EdgeTrustSDNPacket'", field);
+    }
+}
+
+omnetpp::cValue EdgeTrustSDNPacketDescriptor::getFieldValue(omnetpp::any_ptr object, int field, int i) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldValue(object,field,i);
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        case FIELD_sourceRsuId: return pp->getSourceRsuId();
+        case FIELD_destRsuId: return pp->getDestRsuId();
+        case FIELD_currentHop: return pp->getCurrentHop();
+        case FIELD_trafficClass: return pp->getTrafficClass();
+        case FIELD_packetId: return pp->getPacketId();
+        case FIELD_generationTime: return pp->getGenerationTime().dbl();
+        case FIELD_isDetour: return pp->isDetour();
+        case FIELD_payloadType: return pp->getPayloadType();
+        case FIELD_routePath: return pp->getRoutePath();
+        case FIELD_originVehicleId: return pp->getOriginVehicleId();
+        case FIELD_safetyUrgency: return pp->getSafetyUrgency();
+        default: throw omnetpp::cRuntimeError("Cannot return field %d of class 'EdgeTrustSDNPacket' as cValue -- field index out of range?", field);
+    }
+}
+
+void EdgeTrustSDNPacketDescriptor::setFieldValue(omnetpp::any_ptr object, int field, int i, const omnetpp::cValue& value) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount()){
+            base->setFieldValue(object, field, i, value);
+            return;
+        }
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        case FIELD_sourceRsuId: pp->setSourceRsuId(omnetpp::checked_int_cast<int>(value.intValue())); break;
+        case FIELD_destRsuId: pp->setDestRsuId(omnetpp::checked_int_cast<int>(value.intValue())); break;
+        case FIELD_currentHop: pp->setCurrentHop(omnetpp::checked_int_cast<int>(value.intValue())); break;
+        case FIELD_trafficClass: pp->setTrafficClass(omnetpp::checked_int_cast<int>(value.intValue())); break;
+        case FIELD_packetId: pp->setPacketId(omnetpp::checked_int_cast<int>(value.intValue())); break;
+        case FIELD_generationTime: pp->setGenerationTime(value.doubleValue()); break;
+        case FIELD_isDetour: pp->setIsDetour(value.boolValue()); break;
+        case FIELD_payloadType: pp->setPayloadType(value.stringValue()); break;
+        case FIELD_routePath: pp->setRoutePath(value.stringValue()); break;
+        case FIELD_originVehicleId: pp->setOriginVehicleId(omnetpp::checked_int_cast<int>(value.intValue())); break;
+        case FIELD_safetyUrgency: pp->setSafetyUrgency(value.doubleValue()); break;
+        default: throw omnetpp::cRuntimeError("Cannot set field %d of class 'EdgeTrustSDNPacket'", field);
+    }
+}
+
+const char *EdgeTrustSDNPacketDescriptor::getFieldStructName(int field) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldStructName(field);
+        field -= base->getFieldCount();
+    }
+    switch (field) {
+        default: return nullptr;
+    };
+}
+
+omnetpp::any_ptr EdgeTrustSDNPacketDescriptor::getFieldStructValuePointer(omnetpp::any_ptr object, int field, int i) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount())
+            return base->getFieldStructValuePointer(object, field, i);
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        default: return omnetpp::any_ptr(nullptr);
+    }
+}
+
+void EdgeTrustSDNPacketDescriptor::setFieldStructValuePointer(omnetpp::any_ptr object, int field, int i, omnetpp::any_ptr ptr) const
+{
+    omnetpp::cClassDescriptor *base = getBaseClassDescriptor();
+    if (base) {
+        if (field < base->getFieldCount()){
+            base->setFieldStructValuePointer(object, field, i, ptr);
+            return;
+        }
+        field -= base->getFieldCount();
+    }
+    EdgeTrustSDNPacket *pp = omnetpp::fromAnyPtr<EdgeTrustSDNPacket>(object); (void)pp;
+    switch (field) {
+        default: throw omnetpp::cRuntimeError("Cannot set field %d of class 'EdgeTrustSDNPacket'", field);
+    }
+}
+
 }  // namespace veins
 
 namespace omnetpp {

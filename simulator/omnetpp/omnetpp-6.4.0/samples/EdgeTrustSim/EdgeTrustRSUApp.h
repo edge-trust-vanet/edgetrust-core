@@ -9,15 +9,18 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <queue>
 #include <fstream>
 #include <mutex>
 #include <string>
 
 namespace veins {
 
-// Forward declarations for Fog Layer
+// Forward declarations for Fog Layer & SDN Controller
 struct FogMasterDigestEntry;
 class EdgeTrustFogApp;
+class EdgeTrustSDNController;
+class EdgeTrustSDNPacket;
 
 struct InterRSUDigestEntry {
     int nodeId = 0;
@@ -100,8 +103,12 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     virtual void receiveFogMasterDigest(const std::vector<FogMasterDigestEntry>& masterDigest);
     virtual void receiveFogRevocation(int offendingNodeId, int attackType, double confidence, const std::string& reason);
 
+    // Public SDN Adaptive Forwarding Interface
+    virtual void receiveSDNPacket(EdgeTrustSDNPacket* pkt);
+
   protected:
     virtual void initialize(int stage) override;
+    virtual int numInitStages() const override { return 2; }
     virtual void onBSM(DemoSafetyMessage* bsm) override;
     virtual void handleSelfMsg(cMessage* msg) override;
     virtual void finish() override;
@@ -120,6 +127,12 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     // Fog Layer communication handlers
     virtual void reportToFog(const std::vector<InterRSUDigestEntry>& digest);
     virtual void reportThreatToFog(int offendingNodeId, int attackType, double confidence, const std::string& reason);
+
+    // SDN Adaptive Forwarding Handlers
+    virtual void sendSDNTransitPacket();
+    virtual void forwardSDNPacket(EdgeTrustSDNPacket* pkt);
+    virtual void processSDNQoSTransmission();
+    virtual void reportLinkStatsToSDN(int neighborRsuId, double pdr, double latencyMs);
 
     virtual void logVehicleFeatures(int nodeId, double posX, double posY,
                                    double speed, double direction, double acceleration,
@@ -157,9 +170,26 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
 
     // Fog Layer integration configuration & statistics
     bool enableFogIntegration = true;
+    int fogId = 0;
+    int defaultPeerRsuId = 1;
     int totalFogSyncsSent = 0;
     int totalFogMasterSyncsReceived = 0;
     int totalFogRevocationsReceived = 0;
+
+    // SDN Adaptive Forwarding Configuration & Queues
+    bool enableSDN = true;
+    double sdnPacketInterval = 2.0;
+    cMessage* sdnPacketTimerMsg = nullptr;
+    int sdnPacketSequence = 0;
+    std::queue<EdgeTrustSDNPacket*> sdnHighPriorityQueue;   // Class 0: Safety Critical
+    std::queue<EdgeTrustSDNPacket*> sdnNormalPriorityQueue; // Class 1: Trust/Control
+    std::queue<EdgeTrustSDNPacket*> sdnBestEffortQueue;    // Class 2: Telemetry/Best-Effort
+
+    int totalSDNPacketsOriginated = 0;
+    int totalSDNPacketsForwarded = 0;
+    int totalSDNPacketsDelivered = 0;
+    int totalSDNDetoursExecuted = 0;
+    int totalSDNPacketsDropped = 0;
 
     std::map<int, VehicleTelemetry> vehicleRecords;
 

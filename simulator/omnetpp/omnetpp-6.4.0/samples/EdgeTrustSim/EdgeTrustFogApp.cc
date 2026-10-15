@@ -1,5 +1,6 @@
 #include "veins/modules/application/edgetrust/EdgeTrustFogApp.h"
 #include "veins/modules/application/edgetrust/EdgeTrustRSUApp.h"
+#include "veins/modules/application/edgetrust/EdgeTrustSDNController.h"
 #include <omnetpp.h>
 #include <fstream>
 #include <sstream>
@@ -77,16 +78,21 @@ static std::string extractFogString(const std::string& block, const std::string&
 void EdgeTrustFogApp::initialize(int stage)
 {
     if (stage == 0) {
-        fogId = par("fogId").intValue();
-        fogSyncInterval = par("fogSyncInterval").doubleValue();
-        conflictTolerance = par("conflictTolerance").doubleValue();
-        saveCheckpointEnabled = par("saveCheckpoint").boolValue();
-        loadCheckpointEnabled = par("loadCheckpoint").boolValue();
-        checkpointFilePath = par("checkpointFile").stringValue();
-        checkpointInterval = par("checkpointInterval").doubleValue();
-        posX = par("posX").doubleValue();
-        posY = par("posY").doubleValue();
-        posZ = par("posZ").doubleValue();
+        fogId = hasPar("fogId") ? par("fogId").intValue() : 0;
+        fogSyncInterval = hasPar("fogSyncInterval") ? par("fogSyncInterval").doubleValue() : 2.0;
+        conflictTolerance = hasPar("conflictTolerance") ? par("conflictTolerance").doubleValue() : 0.20;
+        saveCheckpointEnabled = hasPar("saveCheckpoint") ? par("saveCheckpoint").boolValue() : true;
+        loadCheckpointEnabled = hasPar("loadCheckpoint") ? par("loadCheckpoint").boolValue() : false;
+        checkpointFilePath = hasPar("checkpointFile") ? par("checkpointFile").stringValue() : ("results/checkpoint_fog" + std::to_string(fogId) + "_ledger.json");
+        checkpointInterval = hasPar("checkpointInterval") ? par("checkpointInterval").doubleValue() : 20.0;
+        posX = hasPar("posX") ? par("posX").doubleValue() : (fogId == 0 ? 58.0 : 178.0);
+        posY = hasPar("posY") ? par("posY").doubleValue() : 15.0;
+        posZ = hasPar("posZ") ? par("posZ").doubleValue() : 10.0;
+        managedRsuOffset = hasPar("managedRsuOffset") ? par("managedRsuOffset").intValue() : (fogId * 2);
+        managedRsuCount = hasPar("managedRsuCount") ? par("managedRsuCount").intValue() : 2;
+        peerFogId = hasPar("peerFogId") ? par("peerFogId").intValue() : (fogId == 0 ? 1 : 0);
+        enableInterFog = hasPar("enableInterFog") ? par("enableInterFog").boolValue() : true;
+        enableSDNIntegration = hasPar("enableSDNIntegration") ? par("enableSDNIntegration").boolValue() : true;
 
         fogSyncTimerMsg = new cMessage("fogSyncTimer");
         scheduleAt(simTime() + fogSyncInterval, fogSyncTimerMsg);
@@ -104,11 +110,29 @@ void EdgeTrustFogApp::initialize(int stage)
         EV_INFO << " [t=" << simTime() << "s] [FOG LAYER INITIALIZED] Regional Fog Node " << fogId << endl;
         EV_INFO << "   -> Architecture: Tier-3 Regional Trust Aggregation & Consensus Layer" << endl;
         EV_INFO << "   -> Sync Interval: " << fogSyncInterval << "s | Conflict Tolerance: " << conflictTolerance << endl;
-        EV_INFO << "   -> Coordinated RSUs: RSU 0 (Grid 1) <---> RSU 1 (Grid 2)" << endl;
+        EV_INFO << "   -> Managed Cluster RSUs: Offset " << managedRsuOffset << ", Count " << managedRsuCount << endl;
+        EV_INFO << "   -> Inter-Fog Peer: Fog " << peerFogId << " (" << (enableInterFog ? "ENABLED" : "DISABLED") << ")" << endl;
+        EV_INFO << "   -> Tier-4 SDN Integration: " << (enableSDNIntegration ? "CONNECTED" : "STANDALONE") << endl;
         EV_INFO << "   -> Regional Checkpoint: " << (saveCheckpointEnabled ? checkpointFilePath : "DISABLED") << endl;
         EV_INFO << "============================================================" << endl;
 
-        updateFogCanvasVisual("init", "deepskyblue", "Fog Server: Initialized (2 RSUs Linked)");
+        updateFogCanvasVisual("init", "deepskyblue", "Fog " + std::to_string(fogId) + ": Cluster Active");
+    }
+    else if (stage == 1) {
+        cModule* parent = getParentModule();
+        if (parent && enableSDNIntegration) {
+            cModule* sdnMod = parent->getSubmodule("sdn");
+            if (sdnMod) {
+                EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+                if (sdn) {
+                    std::vector<int> managed;
+                    for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
+                        managed.push_back(i);
+                    }
+                    sdn->registerFog(fogId, Coord(posX, posY, posZ), managed);
+                }
+            }
+        }
     }
 }
 
@@ -129,6 +153,7 @@ void EdgeTrustFogApp::handleMessage(cMessage* msg)
 
 void EdgeTrustFogApp::receiveRSUDigest(int sourceRsuId, const std::vector<InterRSUDigestEntry>& digest)
 {
+    Enter_Method_Silent();
     totalRSUDigestsIngested++;
     int updatedNodes = 0;
     int newNodes = 0;
@@ -349,6 +374,7 @@ void EdgeTrustFogApp::reconcileConflictsForNode(FogVehicleRecord& rec, int newRs
 
 void EdgeTrustFogApp::receiveRSUThreatAlert(int sourceRsuId, int offendingNodeId, int attackType, double confidence, const std::string& reason)
 {
+    Enter_Method_Silent();
     EV_WARN << "============================================================" << endl;
     EV_WARN << " [t=" << simTime() << "s] [FOG REGIONAL INCIDENT INGESTED] Alert from RSU " << sourceRsuId << endl;
     EV_WARN << "   -> Offending Node: " << offendingNodeId << " | Attack Type ID: " << attackType << endl;
@@ -376,7 +402,7 @@ void EdgeTrustFogApp::triggerRegionalRevocation(int nodeId, int attackType, doub
 
     cModule* parent = getParentModule();
     if (parent) {
-        for (int i = 0; i < 2; ++i) {
+        for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
             cModule* rsuHost = parent->getSubmodule("rsu", i);
             if (rsuHost) {
                 EdgeTrustRSUApp* rsuApp = dynamic_cast<EdgeTrustRSUApp*>(rsuHost->getSubmodule("appl"));
@@ -385,19 +411,49 @@ void EdgeTrustFogApp::triggerRegionalRevocation(int nodeId, int attackType, doub
                 }
             }
         }
+
+        // Propagate across clusters to peer Fog
+        if (enableInterFog) {
+            cModule* peerFogHost = parent->getSubmodule("fog", peerFogId);
+            if (peerFogHost) {
+                EdgeTrustFogApp* peerFog = dynamic_cast<EdgeTrustFogApp*>(peerFogHost);
+                if (peerFog) {
+                    totalInterFogRevocationsSent++;
+                    peerFog->receiveInterFogRevocation(fogId, nodeId, attackType, confidence, reason);
+                }
+            }
+        }
+
+        // Notify SDN Controller
+        if (enableSDNIntegration) {
+            cModule* sdnHost = parent->getSubmodule("sdn");
+            if (sdnHost) {
+                EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnHost);
+                if (sdn) {
+                    sdn->notifyNodeThreat(fogId + 100, nodeId, attackType, confidence, reason);
+                }
+            }
+        }
     }
 
-    updateFogCanvasVisual("revocation", "red", "FOG CRL REVOCATION: Node " + std::to_string(nodeId) + " Blacklisted");
+    updateFogCanvasVisual("revocation", "red", "FOG " + std::to_string(fogId) + " CRL REVOCATION: Node " + std::to_string(nodeId) + " Blacklisted");
 }
 
 void EdgeTrustFogApp::processPeriodicRegionalAggregation()
 {
     pushRegionalMasterDigest();
 
+    if (enableInterFog) {
+        sendInterFogSync();
+    }
+    if (enableSDNIntegration) {
+        reportToSDN();
+    }
+
     std::stringstream info;
-    info << "Fog Regional Ledger: " << regionalLedger.size() << " Nodes | "
+    info << "Fog " << fogId << " Regional Ledger: " << regionalLedger.size() << " Nodes | "
          << regionalRevocationList.size() << " Revoked | "
-         << totalConflictsResolved << " Conflicts Resolved";
+         << totalConflictsResolved << " Conflicts";
 
     updateFogCanvasVisual("sync", "springgreen", info.str());
 }
@@ -429,7 +485,7 @@ void EdgeTrustFogApp::pushRegionalMasterDigest()
 
     cModule* parent = getParentModule();
     if (parent) {
-        for (int i = 0; i < 2; ++i) {
+        for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
             cModule* rsuHost = parent->getSubmodule("rsu", i);
             if (rsuHost) {
                 EdgeTrustRSUApp* rsuApp = dynamic_cast<EdgeTrustRSUApp*>(rsuHost->getSubmodule("appl"));
@@ -440,8 +496,152 @@ void EdgeTrustFogApp::pushRegionalMasterDigest()
         }
     }
 
-    EV_INFO << "[t=" << simTime() << "s] [FOG REGIONAL MASTER SYNC] Dispatched consolidated ledger ("
-            << masterDigest.size() << " entries) to RSUs." << endl;
+    EV_INFO << "[t=" << simTime() << "s] [FOG " << fogId << " REGIONAL MASTER SYNC] Dispatched consolidated ledger ("
+            << masterDigest.size() << " entries) to managed RSUs (" << managedRsuOffset << ".."
+            << (managedRsuOffset + managedRsuCount - 1) << ")." << endl;
+}
+
+void EdgeTrustFogApp::sendInterFogSync()
+{
+    cModule* parent = getParentModule();
+    if (!parent) return;
+    cModule* peerFogHost = parent->getSubmodule("fog", peerFogId);
+    if (!peerFogHost) return;
+    EdgeTrustFogApp* peerFog = dynamic_cast<EdgeTrustFogApp*>(peerFogHost);
+    if (!peerFog) return;
+
+    totalInterFogSyncsSent++;
+    std::vector<FogMasterDigestEntry> clusterDigest;
+    clusterDigest.reserve(regionalLedger.size());
+    for (const auto& kv : regionalLedger) {
+        const FogVehicleRecord& rec = kv.second;
+        if (simTime() - rec.lastSeen < 20.0 || rec.isRevoked) {
+            FogMasterDigestEntry e;
+            e.nodeId = rec.nodeId;
+            e.regionalTrustScore = rec.regionalTrustScore;
+            e.regionalHistoricalTrust = rec.regionalHistoricalTrust;
+            e.isRevoked = rec.isRevoked;
+            e.attackType = rec.primaryAttackType;
+            e.lastPos = rec.lastPos;
+            e.lastSpeed = rec.lastSpeed;
+            e.lastSeen = rec.lastSeen;
+            e.verdict = rec.isRevoked ? "BLOCK" : (rec.regionalTrustScore < 0.70 ? "WARN" : "ACCEPT");
+            e.reportingRSUs = static_cast<int>(rec.rsuObservations.size());
+            e.hadConflict = rec.hasConflict;
+            clusterDigest.push_back(e);
+        }
+    }
+
+    peerFog->receiveInterFogDigest(fogId, clusterDigest);
+}
+
+void EdgeTrustFogApp::receiveInterFogDigest(int sourceFogId, const std::vector<FogMasterDigestEntry>& digest)
+{
+    Enter_Method_Silent();
+    totalInterFogSyncsReceived++;
+    int syncedCount = 0;
+    int prewarmedCount = 0;
+
+    for (const auto& entry : digest) {
+        if (entry.isRevoked) {
+            if (regionalRevocationList.find(entry.nodeId) == regionalRevocationList.end()) {
+                regionalRevocationList.insert(entry.nodeId);
+                totalRevocationsIssued++;
+                auto it = regionalLedger.find(entry.nodeId);
+                if (it != regionalLedger.end()) {
+                    it->second.isRevoked = true;
+                    it->second.regionalTrustScore = 0.05;
+                }
+            }
+        }
+
+        auto it = regionalLedger.find(entry.nodeId);
+        if (it != regionalLedger.end()) {
+            it->second.regionalHistoricalTrust = (0.75 * it->second.regionalHistoricalTrust) + (0.25 * entry.regionalHistoricalTrust);
+            syncedCount++;
+        } else {
+            // Pre-warm record for incoming cross-cluster handover
+            FogVehicleRecord rec;
+            rec.nodeId = entry.nodeId;
+            rec.firstSeen = simTime();
+            rec.lastSeen = entry.lastSeen;
+            rec.lastPos = entry.lastPos;
+            rec.lastSpeed = entry.lastSpeed;
+            rec.regionalTrustScore = entry.regionalTrustScore;
+            rec.regionalHistoricalTrust = entry.regionalHistoricalTrust;
+            rec.isRevoked = entry.isRevoked;
+            rec.primaryAttackType = entry.attackType;
+            rec.revocationReason = entry.isRevoked ? "Peer Fog Authoritative Revocation" : "";
+            regionalLedger[entry.nodeId] = rec;
+            prewarmedCount++;
+        }
+    }
+
+    EV_INFO << "[t=" << simTime() << "s] [INTER-FOG DIGEST INGESTED] Fog " << fogId
+            << " ingested " << digest.size() << " entries from Peer Fog " << sourceFogId
+            << " (" << syncedCount << " aligned, " << prewarmedCount << " handover pre-warmed)." << endl;
+}
+
+void EdgeTrustFogApp::receiveInterFogRevocation(int sourceFogId, int offendingNodeId, int attackType, double confidence, const std::string& reason)
+{
+    Enter_Method_Silent();
+    totalInterFogRevocationsReceived++;
+    regionalRevocationList.insert(offendingNodeId);
+
+    auto it = regionalLedger.find(offendingNodeId);
+    if (it != regionalLedger.end()) {
+        it->second.isRevoked = true;
+        it->second.regionalTrustScore = 0.05;
+        it->second.primaryAttackType = attackType;
+        it->second.revocationReason = "Global CRL Revocation from Fog " + std::to_string(sourceFogId);
+        it->second.revokedAt = simTime();
+    }
+
+    // Immediately propagate CRL revocation to local managed RSUs
+    cModule* parent = getParentModule();
+    if (parent) {
+        for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
+            cModule* rsuHost = parent->getSubmodule("rsu", i);
+            if (rsuHost) {
+                EdgeTrustRSUApp* rsuApp = dynamic_cast<EdgeTrustRSUApp*>(rsuHost->getSubmodule("appl"));
+                if (rsuApp) {
+                    rsuApp->receiveFogRevocation(offendingNodeId, attackType, confidence, reason);
+                }
+            }
+        }
+    }
+
+    EV_WARN << "============================================================" << endl;
+    EV_WARN << " [t=" << simTime() << "s] [GLOBAL INTER-FOG CRL ORDER APPLIED] Fog " << fogId << endl;
+    EV_WARN << "   -> Target Node: " << offendingNodeId << " revoked via Inter-Fog Trunk from Fog " << sourceFogId << endl;
+    EV_WARN << "   -> Reason: " << reason << " | Dispatched to Local Cluster RSUs (" << managedRsuOffset
+            << ".." << (managedRsuOffset + managedRsuCount - 1) << ")" << endl;
+    EV_WARN << "============================================================" << endl;
+}
+
+void EdgeTrustFogApp::reportToSDN()
+{
+    cModule* parent = getParentModule();
+    if (!parent) return;
+    cModule* sdnMod = parent->getSubmodule("sdn");
+    if (!sdnMod) return;
+    EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+    if (!sdn) return;
+
+    for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
+        double trustSum = 0.0;
+        int count = 0;
+        for (const auto& kv : regionalLedger) {
+            auto obsIt = kv.second.rsuObservations.find(i);
+            if (obsIt != kv.second.rsuObservations.end()) {
+                trustSum += obsIt->second.directTrust;
+                count++;
+            }
+        }
+        double avgTrust = (count > 0) ? (trustSum / count) : 1.0;
+        int peerInCluster = (i == managedRsuOffset) ? (managedRsuOffset + 1) : managedRsuOffset;
+        sdn->updateLinkMetrics(i, peerInCluster, avgTrust, 1.0, 2.0, 0.05);
+    }
 }
 
 void EdgeTrustFogApp::saveCheckpoint(const std::string& filepath)
@@ -599,40 +799,49 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
     cFigure* root = canvas->getRootFigure();
     if (!root) return;
 
-    cModule* rsu0Mod = parent->getSubmodule("rsu", 0);
-    cModule* rsu1Mod = parent->getSubmodule("rsu", 1);
     Coord pFog = getModuleVisualPos(this, Coord(posX, posY, 0));
-    Coord p0 = getModuleVisualPos(rsu0Mod, Coord(58, 49, 0));
-    Coord p1 = getModuleVisualPos(rsu1Mod, Coord(178, 49, 0));
 
-    // Link 0: RSU 0 <---> Fog
-    cLineFigure* line0 = dynamic_cast<cLineFigure*>(root->getFigure("fog_backbone_line0"));
-    if (!line0) {
-        line0 = new cLineFigure("fog_backbone_line0");
-        root->addFigure(line0);
-    }
-    line0->setStart(cFigure::Point(p0.x, p0.y));
-    line0->setEnd(cFigure::Point(pFog.x, pFog.y));
-    line0->setLineColor(cFigure::Color(color.c_str()));
-    line0->setLineWidth(type == "revocation" ? 3.0 : 1.75);
-    line0->setLineStyle(type == "revocation" ? cFigure::LINE_SOLID : cFigure::LINE_DASHED);
+    // Connect Fog to its managed RSUs
+    for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
+        cModule* rsuMod = parent->getSubmodule("rsu", i);
+        Coord pRsu = getModuleVisualPos(rsuMod, Coord(i < 2 ? 58.0 : 178.0, (i % 2 == 0) ? 49.0 : 98.0, 0));
+        std::string lineName = "fog" + std::to_string(fogId) + "_rsu" + std::to_string(i) + "_line";
 
-    // Link 1: RSU 1 <---> Fog
-    cLineFigure* line1 = dynamic_cast<cLineFigure*>(root->getFigure("fog_backbone_line1"));
-    if (!line1) {
-        line1 = new cLineFigure("fog_backbone_line1");
-        root->addFigure(line1);
+        cLineFigure* line = dynamic_cast<cLineFigure*>(root->getFigure(lineName.c_str()));
+        if (!line) {
+            line = new cLineFigure(lineName.c_str());
+            root->addFigure(line);
+        }
+        line->setStart(cFigure::Point(pRsu.x, pRsu.y));
+        line->setEnd(cFigure::Point(pFog.x, pFog.y));
+        line->setLineColor(cFigure::Color(color.c_str()));
+        line->setLineWidth(type == "revocation" ? 3.0 : 1.75);
+        line->setLineStyle(type == "revocation" ? cFigure::LINE_SOLID : cFigure::LINE_DASHED);
     }
-    line1->setStart(cFigure::Point(p1.x, p1.y));
-    line1->setEnd(cFigure::Point(pFog.x, pFog.y));
-    line1->setLineColor(cFigure::Color(color.c_str()));
-    line1->setLineWidth(type == "revocation" ? 3.0 : 1.75);
-    line1->setLineStyle(type == "revocation" ? cFigure::LINE_SOLID : cFigure::LINE_DASHED);
+
+    // If Fog 0, draw Inter-Fog trunk link between Fog 0 and Fog 1
+    if (fogId == 0 && enableInterFog) {
+        cModule* fog1Mod = parent->getSubmodule("fog", 1);
+        if (fog1Mod) {
+            Coord pFog1 = getModuleVisualPos(fog1Mod, Coord(178, 15, 0));
+            cLineFigure* trunk = dynamic_cast<cLineFigure*>(root->getFigure("fog_trunk_line"));
+            if (!trunk) {
+                trunk = new cLineFigure("fog_trunk_line");
+                root->addFigure(trunk);
+            }
+            trunk->setStart(cFigure::Point(pFog.x, pFog.y));
+            trunk->setEnd(cFigure::Point(pFog1.x, pFog1.y));
+            trunk->setLineColor(cFigure::Color("mediumpurple"));
+            trunk->setLineWidth(2.5);
+            trunk->setLineStyle(cFigure::LINE_SOLID);
+        }
+    }
 
     // Label on Fog Node
-    cTextFigure* label = dynamic_cast<cTextFigure*>(root->getFigure("fog_status_label"));
+    std::string labelName = "fog" + std::to_string(fogId) + "_status_label";
+    cTextFigure* label = dynamic_cast<cTextFigure*>(root->getFigure(labelName.c_str()));
     if (!label) {
-        label = new cTextFigure("fog_status_label");
+        label = new cTextFigure(labelName.c_str());
         root->addFigure(label);
     }
     label->setPosition(cFigure::Point(pFog.x, pFog.y - 12.0));
@@ -649,12 +858,19 @@ void EdgeTrustFogApp::clearFogCanvasVisual()
     cFigure* root = canvas->getRootFigure();
     if (!root) return;
 
-    cFigure* l0 = root->getFigure("fog_backbone_line0");
-    if (l0) delete root->removeFigure(l0);
-    cFigure* l1 = root->getFigure("fog_backbone_line1");
-    if (l1) delete root->removeFigure(l1);
-    cFigure* lbl = root->getFigure("fog_status_label");
+    for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
+        std::string lineName = "fog" + std::to_string(fogId) + "_rsu" + std::to_string(i) + "_line";
+        cFigure* l = root->getFigure(lineName.c_str());
+        if (l) delete root->removeFigure(l);
+    }
+    std::string labelName = "fog" + std::to_string(fogId) + "_status_label";
+    cFigure* lbl = root->getFigure(labelName.c_str());
     if (lbl) delete root->removeFigure(lbl);
+
+    if (fogId == 0) {
+        cFigure* trunk = root->getFigure("fog_trunk_line");
+        if (trunk) delete root->removeFigure(trunk);
+    }
 }
 
 void EdgeTrustFogApp::finish()
@@ -683,6 +899,8 @@ void EdgeTrustFogApp::finish()
     EV_INFO << "   -> Regional Revocations Dispatched: " << totalRevocationsIssued << endl;
     EV_INFO << "   -> Multi-Intersection Distributed Attacks Detected: " << totalCrossIntersectionAttacksDetected << endl;
     EV_INFO << "   -> Regional Master Syncs Pushed: " << totalMasterSyncsDispatched << endl;
+    EV_INFO << "   -> Inter-Fog Syncs [Sent: " << totalInterFogSyncsSent << ", Recv: " << totalInterFogSyncsReceived << "]" << endl;
+    EV_INFO << "   -> Inter-Fog Revocations [Sent: " << totalInterFogRevocationsSent << ", Recv: " << totalInterFogRevocationsReceived << "]" << endl;
     EV_INFO << "============================================================" << endl;
 
     recordScalar("edgeTrust_fogTrackedVehicles", regionalLedger.size());
@@ -690,6 +908,10 @@ void EdgeTrustFogApp::finish()
     recordScalar("edgeTrust_fogConflictsResolved", totalConflictsResolved);
     recordScalar("edgeTrust_fogRevocationsIssued", totalRevocationsIssued);
     recordScalar("edgeTrust_fogMasterSyncsDispatched", totalMasterSyncsDispatched);
+    recordScalar("edgeTrust_fogInterFogSyncsSent", totalInterFogSyncsSent);
+    recordScalar("edgeTrust_fogInterFogSyncsReceived", totalInterFogSyncsReceived);
+    recordScalar("edgeTrust_fogInterFogRevocationsSent", totalInterFogRevocationsSent);
+    recordScalar("edgeTrust_fogInterFogRevocationsReceived", totalInterFogRevocationsReceived);
 }
 
 } // namespace veins

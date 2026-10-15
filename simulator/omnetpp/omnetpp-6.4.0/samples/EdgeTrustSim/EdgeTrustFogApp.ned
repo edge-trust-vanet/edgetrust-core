@@ -15,4 +15,9 @@ simple EdgeTrustFogApp
         double posX = default(118);
         double posY = default(15);
         double posZ = default(10);
+        int managedRsuOffset = default(0);
+        int managedRsuCount = default(2);
+        int peerFogId = default(1);
+        bool enableInterFog = default(true);
+        bool enableSDNIntegration = default(true);
 }

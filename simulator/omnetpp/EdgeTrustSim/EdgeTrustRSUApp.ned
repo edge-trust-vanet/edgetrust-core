@@ -20,4 +20,8 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         bool enableInterRSU = default(true);
         double interRsuSyncInterval @unit(s) = default(2.5s);
         bool enableFogIntegration = default(true);
+        int fogId = default(0);
+        bool enableSDN = default(true);
+        double sdnPacketInterval @unit(s) = default(2.0s);
+        int defaultPeerRsuId = default(1);
 }
