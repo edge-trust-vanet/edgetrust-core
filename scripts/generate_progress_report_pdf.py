@@ -112,6 +112,8 @@ def build_pdf(filename):
         "Implemented simulation and trust-state checkpointing.",
         "Set up a two-RSU simulation scenario.",
         "Implemented inter-RSU (I2I) communication backbone for periodic trust synchronization and urgent threat alerts.",
+        "Implemented regional Fog layer between RSUs with multi-RSU trust aggregation.",
+        "Handled duplicate, stale and conflicting trust updates with Bayesian consensus and safety override.",
         "Built an interactive web dashboard for real-time model evaluation and data inspection."
     ]
 
@@ -124,8 +126,6 @@ def build_pdf(filename):
     story.append(Paragraph("Remaining Work", h2_style))
 
     remaining_points = [
-        "Handle duplicate, stale and conflicting trust updates (By 15th October).",
-        "Implement Fog-based regional trust aggregation (By 15th October: Fog layer for 2 RSUs).",
         "Integrate SDN-based adaptive forwarding (By 16th October: SDN based adaptive forwarding for multiple RSUs).",
         "Test scalability with more RSUs and larger network scenarios (By 18th October)."
     ]
