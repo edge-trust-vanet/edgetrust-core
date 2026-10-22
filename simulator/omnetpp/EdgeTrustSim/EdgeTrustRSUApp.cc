@@ -671,7 +671,7 @@ void EdgeTrustRSUApp::addTransmissionArrow(const Coord& from, const Coord& to, c
     line->setStart(cFigure::Point(from.x, from.y));
     line->setEnd(cFigure::Point(to.x, to.y));
     line->setLineColor(cFigure::Color(color.c_str()));
-    line->setLineWidth(2.5);
+    line->setLineWidth(1.2);
     line->setEndArrowhead(cFigure::ARROW_TRIANGLE);
 
     canvas->getRootFigure()->addFigure(line);
@@ -725,7 +725,7 @@ void EdgeTrustRSUApp::sendInterRSUTrustSync()
             << " and RSU " << peerId << endl;
     EV_INFO << "============================================================" << endl;
 
-    updateI2ICanvasVisual("sync", "deepskyblue", "I2I Backbone Sync: " + std::to_string(digest.size()) + " Nodes");
+    updateI2ICanvasVisual("sync", "deepskyblue", "I2I Sync: " + std::to_string(digest.size()) + " Nodes");
     peerApp->receiveInterRSUTrustSync(rsuId, digest);
 
     if (enableFogIntegration) {
@@ -806,7 +806,7 @@ void EdgeTrustRSUApp::sendInterRSUThreatAlert(int offendingNodeId, int attackTyp
     EV_INFO << "   -> Action: Network-Wide Preemptive Handover Quarantine Dispatched!" << endl;
     EV_INFO << "============================================================" << endl;
 
-    updateI2ICanvasVisual("alert", "red", "I2I THREAT ALERT: Quarantine Node " + std::to_string(offendingNodeId));
+    updateI2ICanvasVisual("alert", "firebrick", "Quarantine Node " + std::to_string(offendingNodeId));
     peerApp->receiveInterRSUThreatAlert(rsuId, offendingNodeId, attackType, confidence, reason);
 
     if (enableFogIntegration) {
@@ -848,7 +848,7 @@ void EdgeTrustRSUApp::receiveInterRSUThreatAlert(int sourceRsuId, int offendingN
     EV_INFO << "   -> Network Defense: Node " << offendingNodeId << " PRE-BLACKLISTED before entry into Sector " << rsuId << "!" << endl;
     EV_INFO << "============================================================" << endl;
 
-    updateI2ICanvasVisual("alert", "magenta", "RSU " + std::to_string(rsuId) + " Quarantined Node " + std::to_string(offendingNodeId));
+    updateI2ICanvasVisual("alert", "firebrick", "Quarantined Node " + std::to_string(offendingNodeId));
 }
 
 void EdgeTrustRSUApp::reportToFog(const std::vector<InterRSUDigestEntry>& digest)
@@ -986,14 +986,14 @@ void EdgeTrustRSUApp::updateI2ICanvasVisual(const std::string& type, const std::
     }
 
     cModule* rsu0Mod = parent->getSubmodule("rsu", 0);
-    cModule* rsu1Mod = parent->getSubmodule("rsu", 1);
+    cModule* rsu2Mod = parent->getSubmodule("rsu", 2);
     Coord p0 = getModuleVisualPos(rsu0Mod, Coord(58, 49, 0));
-    Coord p1 = getModuleVisualPos(rsu1Mod, Coord(178, 49, 0));
+    Coord p1 = getModuleVisualPos(rsu2Mod, Coord(178, 49, 0));
 
     line->setStart(cFigure::Point(p0.x, p0.y));
     line->setEnd(cFigure::Point(p1.x, p1.y));
     line->setLineColor(cFigure::Color(color.c_str()));
-    line->setLineWidth(type == "alert" ? 3.5 : 2.0);
+    line->setLineWidth(type == "alert" ? 1.6 : 1.0);
     line->setLineStyle(cFigure::LINE_DASHED);
 
     cTextFigure* label = dynamic_cast<cTextFigure*>(root->getFigure("i2i_backbone_label"));
@@ -1001,9 +1001,12 @@ void EdgeTrustRSUApp::updateI2ICanvasVisual(const std::string& type, const std::
         label = new cTextFigure("i2i_backbone_label");
         root->addFigure(label);
     }
-    label->setPosition(cFigure::Point((p0.x + p1.x) / 2.0, ((p0.y + p1.y) / 2.0) - 12.0));
+    label->setPosition(cFigure::Point((p0.x + p1.x) / 2.0, ((p0.y + p1.y) / 2.0) - 6.0));
     label->setText(infoText.c_str());
     label->setColor(cFigure::Color(color.c_str()));
+    label->setFont(cFigure::Font("", 6, cFigure::FONT_BOLD));
+    label->setAnchor(cFigure::ANCHOR_CENTER);
+    label->setHalo(true);
 }
 
 void EdgeTrustRSUApp::clearI2ICanvasVisual()

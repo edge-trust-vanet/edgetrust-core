@@ -24,9 +24,9 @@ network EdgeTrustNetwork extends Scenario {
             @display("p=150,140;i=veins/sign/yellowdiamond;is=vs");
         }
         fog[2]: EdgeTrustFogApp {
-            @display("p=118,20;i=device/server;is=m");
+            @display("p=118,15;i=device/server;is=s");
         }
         sdn: EdgeTrustSDNController {
-            @display("p=118,5;i=device/server2;is=l");
+            @display("p=118,8;i=device/server2;is=s");
         }
 }

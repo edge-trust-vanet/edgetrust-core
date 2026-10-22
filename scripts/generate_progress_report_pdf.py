@@ -51,8 +51,8 @@ def build_pdf(filename):
         'DocTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=18,
-        leading=22,
+        fontSize=15,
+        leading=19,
         textColor=colors.black,
         spaceAfter=2
     )
@@ -60,22 +60,22 @@ def build_pdf(filename):
     team_style = ParagraphStyle(
         'TeamTitle',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=12,
-        leading=16,
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
         textColor=colors.black,
-        spaceAfter=4
+        spaceAfter=3
     )
 
     h2_style = ParagraphStyle(
         'H2',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=17,
+        fontSize=11,
+        leading=15,
         textColor=colors.black,
-        spaceBefore=16,
-        spaceAfter=8,
+        spaceBefore=10,
+        spaceAfter=5,
         keepWithNext=True
     )
 
@@ -83,12 +83,12 @@ def build_pdf(filename):
         'Bullet',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=10,
-        leading=15,
+        fontSize=9,
+        leading=13,
         textColor=colors.black,
-        leftIndent=15,
-        firstLineIndent=-10,
-        spaceAfter=8.5
+        leftIndent=12,
+        firstLineIndent=-8,
+        spaceAfter=3.5
     )
 
     story = []
@@ -96,38 +96,38 @@ def build_pdf(filename):
     # Title & Team
     story.append(Paragraph("Current Progress and Next Steps", title_style))
     story.append(Paragraph("Team 43", team_style))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceBefore=4, spaceAfter=10))
+    story.append(HRFlowable(width="100%", thickness=0.75, color=colors.black, spaceBefore=3, spaceAfter=8))
 
     # Completed Work
     story.append(Paragraph("Completed Work", h2_style))
 
     completed_points = [
-        "Integrated SUMO, OMNeT++ and Veins.",
+        "Integrated SUMO, OMNeT++ and Veins co-simulation environment.",
         "Implemented V2V/V2I communication and OBU-based heuristic filtering.",
         "Integrated RSU-based ML detection and trust management.",
         "Embedded trained ML models (Random Forest and Logistic Regression) as native C++ predictors in the RSU for real-time edge inference.",
         "Implemented approximately 15 attack scenarios aligned with VeReMi categories.",
-        "Completed 14-feature extraction and CSV logging.",
-        "Added trust-score updates and detection visualization.",
+        "Completed 14-feature extraction and CSV logging pipeline.",
+        "Added trust-score updates and live detection visualization.",
         "Implemented simulation and trust-state checkpointing.",
-        "Set up a two-RSU simulation scenario.",
+        "Expanded to a multi-grid 4-RSU scenario (rsu[0..3]) across two interconnected intersections.",
         "Implemented inter-RSU (I2I) communication backbone for periodic trust synchronization and urgent threat alerts.",
-        "Implemented regional Fog layer between RSUs with multi-RSU trust aggregation.",
-        "Handled duplicate, stale and conflicting trust updates with Bayesian consensus and safety override.",
+        "Implemented multi-tier Fog layer (fog[0..1]) with regional ledger aggregation, conflict resolution (Bayesian consensus and safety-critical override), and inter-Fog synchronization.",
+        "Integrated SDN-based adaptive forwarding with Dijkstra trust-cost routing and 3-class priority QoS scheduling.",
         "Built an interactive web dashboard for real-time model evaluation and data inspection."
     ]
 
     for pt in completed_points:
         story.append(Paragraph(f"• &nbsp; {pt}", bullet_style))
 
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 4))
 
     # Remaining Work
     story.append(Paragraph("Remaining Work", h2_style))
 
     remaining_points = [
-        "Integrate SDN-based adaptive forwarding (By 16th October: SDN based adaptive forwarding for multiple RSUs).",
-        "Test scalability with more RSUs and larger network scenarios (By 18th October)."
+        "Test scalability with more RSUs and larger network scenarios (Target: 18th October).",
+        "Evaluate accuracy, precision, recall, F1-score, false-positive rate, latency, and packet delivery ratio across diverse traffic densities."
     ]
 
     for pt in remaining_points:
@@ -137,4 +137,5 @@ def build_pdf(filename):
     print("Done")
 
 if __name__ == '__main__':
-    build_pdf('/tmp/bw_report.pdf')
+    out_path = sys.argv[1] if len(sys.argv) > 1 else '/tmp/bw_report.pdf'
+    build_pdf(out_path)

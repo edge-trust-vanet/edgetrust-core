@@ -5,7 +5,7 @@ simple EdgeTrustSDNController
 {
     parameters:
         @class(veins::EdgeTrustSDNController);
-        @display("i=device/server2;is=l");
+        @display("i=device/server2;is=s");
         int numRSUs = default(4);
         int numFogs = default(2);
         double flowRuleTimeout @unit(s) = default(10.0s);

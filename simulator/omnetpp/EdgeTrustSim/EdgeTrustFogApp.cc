@@ -88,6 +88,12 @@ void EdgeTrustFogApp::initialize(int stage)
         posX = hasPar("posX") ? par("posX").doubleValue() : (fogId == 0 ? 58.0 : 178.0);
         posY = hasPar("posY") ? par("posY").doubleValue() : 15.0;
         posZ = hasPar("posZ") ? par("posZ").doubleValue() : 10.0;
+
+        getDisplayString().setTagArg("p", 0, std::to_string((int)posX).c_str());
+        getDisplayString().setTagArg("p", 1, std::to_string((int)posY).c_str());
+        getDisplayString().setTagArg("is", 0, "s");
+        getDisplayString().setTagArg("t", 0, ("Fog " + std::to_string(fogId)).c_str());
+
         managedRsuOffset = hasPar("managedRsuOffset") ? par("managedRsuOffset").intValue() : (fogId * 2);
         managedRsuCount = hasPar("managedRsuCount") ? par("managedRsuCount").intValue() : 2;
         peerFogId = hasPar("peerFogId") ? par("peerFogId").intValue() : (fogId == 0 ? 1 : 0);
@@ -116,7 +122,7 @@ void EdgeTrustFogApp::initialize(int stage)
         EV_INFO << "   -> Regional Checkpoint: " << (saveCheckpointEnabled ? checkpointFilePath : "DISABLED") << endl;
         EV_INFO << "============================================================" << endl;
 
-        updateFogCanvasVisual("init", "deepskyblue", "Fog " + std::to_string(fogId) + ": Cluster Active");
+        updateFogCanvasVisual("init", "dodgerblue", "[Fog " + std::to_string(fogId) + "] Active");
     }
     else if (stage == 1) {
         cModule* parent = getParentModule();
@@ -436,7 +442,7 @@ void EdgeTrustFogApp::triggerRegionalRevocation(int nodeId, int attackType, doub
         }
     }
 
-    updateFogCanvasVisual("revocation", "red", "FOG " + std::to_string(fogId) + " CRL REVOCATION: Node " + std::to_string(nodeId) + " Blacklisted");
+    updateFogCanvasVisual("revocation", "firebrick", "CRL: Node " + std::to_string(nodeId));
 }
 
 void EdgeTrustFogApp::processPeriodicRegionalAggregation()
@@ -451,11 +457,9 @@ void EdgeTrustFogApp::processPeriodicRegionalAggregation()
     }
 
     std::stringstream info;
-    info << "Fog " << fogId << " Regional Ledger: " << regionalLedger.size() << " Nodes | "
-         << regionalRevocationList.size() << " Revoked | "
-         << totalConflictsResolved << " Conflicts";
+    info << "[Fog " << fogId << "] " << regionalLedger.size() << " Nodes | CRL: " << regionalRevocationList.size();
 
-    updateFogCanvasVisual("sync", "springgreen", info.str());
+    updateFogCanvasVisual("sync", "seagreen", info.str());
 }
 
 void EdgeTrustFogApp::pushRegionalMasterDigest()
@@ -799,7 +803,7 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
     cFigure* root = canvas->getRootFigure();
     if (!root) return;
 
-    Coord pFog = getModuleVisualPos(this, Coord(posX, posY, 0));
+    Coord pFog = Coord(posX, posY, 0.0);
 
     // Connect Fog to its managed RSUs
     for (int i = managedRsuOffset; i < managedRsuOffset + managedRsuCount; ++i) {
@@ -815,7 +819,7 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
         line->setStart(cFigure::Point(pRsu.x, pRsu.y));
         line->setEnd(cFigure::Point(pFog.x, pFog.y));
         line->setLineColor(cFigure::Color(color.c_str()));
-        line->setLineWidth(type == "revocation" ? 3.0 : 1.75);
+        line->setLineWidth(type == "revocation" ? 1.6 : 1.0);
         line->setLineStyle(type == "revocation" ? cFigure::LINE_SOLID : cFigure::LINE_DASHED);
     }
 
@@ -823,7 +827,7 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
     if (fogId == 0 && enableInterFog) {
         cModule* fog1Mod = parent->getSubmodule("fog", 1);
         if (fog1Mod) {
-            Coord pFog1 = getModuleVisualPos(fog1Mod, Coord(178, 15, 0));
+            Coord pFog1 = Coord(178.0, 15.0, 0.0);
             cLineFigure* trunk = dynamic_cast<cLineFigure*>(root->getFigure("fog_trunk_line"));
             if (!trunk) {
                 trunk = new cLineFigure("fog_trunk_line");
@@ -832,21 +836,24 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
             trunk->setStart(cFigure::Point(pFog.x, pFog.y));
             trunk->setEnd(cFigure::Point(pFog1.x, pFog1.y));
             trunk->setLineColor(cFigure::Color("mediumpurple"));
-            trunk->setLineWidth(2.5);
+            trunk->setLineWidth(1.2);
             trunk->setLineStyle(cFigure::LINE_SOLID);
         }
     }
 
-    // Label on Fog Node
+    // Label on Fog Node (compact 6pt bold, centered with halo)
     std::string labelName = "fog" + std::to_string(fogId) + "_status_label";
     cTextFigure* label = dynamic_cast<cTextFigure*>(root->getFigure(labelName.c_str()));
     if (!label) {
         label = new cTextFigure(labelName.c_str());
         root->addFigure(label);
     }
-    label->setPosition(cFigure::Point(pFog.x, pFog.y - 12.0));
+    label->setPosition(cFigure::Point(pFog.x, pFog.y - 7.0));
     label->setText(infoText.c_str());
     label->setColor(cFigure::Color(color.c_str()));
+    label->setFont(cFigure::Font("", 6, cFigure::FONT_BOLD));
+    label->setAnchor(cFigure::ANCHOR_CENTER);
+    label->setHalo(true);
 }
 
 void EdgeTrustFogApp::clearFogCanvasVisual()

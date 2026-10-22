@@ -26,8 +26,13 @@ void EdgeTrustSDNController::initialize(int stage)
         enableAdaptiveRerouting = hasPar("enableAdaptiveRerouting") ? par("enableAdaptiveRerouting").boolValue() : true;
         enableQoSPriority = hasPar("enableQoSPriority") ? par("enableQoSPriority").boolValue() : true;
         posX = hasPar("posX") ? par("posX").doubleValue() : 118.0;
-        posY = hasPar("posY") ? par("posY").doubleValue() : 5.0;
+        posY = hasPar("posY") ? par("posY").doubleValue() : 8.0;
         posZ = hasPar("posZ") ? par("posZ").doubleValue() : 15.0;
+
+        getDisplayString().setTagArg("p", 0, std::to_string((int)posX).c_str());
+        getDisplayString().setTagArg("p", 1, std::to_string((int)posY).c_str());
+        getDisplayString().setTagArg("is", 0, "s");
+        getDisplayString().setTagArg("t", 0, "SDN Controller");
 
         initializeDefaultTopology();
 
@@ -511,25 +516,9 @@ void EdgeTrustSDNController::updateSDNCanvasVisual()
     clearSDNCanvasVisual();
     cFigure* root = canvas->getRootFigure();
 
-    // 1. Draw Controller Hub Node
     cGroupFigure* group = new cGroupFigure("sdn_topology_overlay");
 
-    cOvalFigure* hub = new cOvalFigure("sdn_hub_circle");
-    hub->setBounds(cFigure::Rectangle(posX - 12.0, posY - 8.0, 24.0, 16.0));
-    hub->setFillColor(cFigure::Color("midnightblue"));
-    hub->setFilled(true);
-    hub->setLineColor(cFigure::Color("deepskyblue"));
-    hub->setLineWidth(2.0);
-    group->addFigure(hub);
-
-    cTextFigure* hubLabel = new cTextFigure("sdn_hub_label");
-    hubLabel->setPosition(cFigure::Point(posX, posY - 12.0));
-    hubLabel->setText("SDN Controller [Tier-4 OpenFlow]");
-    hubLabel->setColor(cFigure::Color("white"));
-    hubLabel->setFont(cFigure::Font("Arial", 8, cFigure::FONT_BOLD));
-    group->addFigure(hubLabel);
-
-    // 2. Draw Active Flow Links between RSUs
+    // 1. Draw Active Flow Links between RSUs
     for (const auto& kv : linkTopology) {
         int u = kv.first.first;
         int v = kv.first.second;
@@ -544,34 +533,36 @@ void EdgeTrustSDNController::updateSDNCanvasVisual()
         line->setEnd(cFigure::Point(posV.x, posV.y));
 
         if (link.isCompromised || link.trustScore < linkTrustThreshold) {
-            line->setLineColor(cFigure::Color("red"));
-            line->setLineWidth(3.0);
+            line->setLineColor(cFigure::Color("firebrick"));
+            line->setLineWidth(1.6);
             line->setLineStyle(cFigure::LINE_DASHED);
         } else if (link.trustScore < 0.85) {
             line->setLineColor(cFigure::Color("darkorange"));
-            line->setLineWidth(2.5);
+            line->setLineWidth(1.3);
             line->setLineStyle(cFigure::LINE_DASHED);
         } else {
             line->setLineColor(cFigure::Color("dodgerblue"));
-            line->setLineWidth(1.8);
+            line->setLineWidth(1.0);
             line->setLineStyle(cFigure::LINE_SOLID);
         }
         group->addFigure(line);
     }
 
-    // 3. Draw Top Live Status Banner
+    // 2. Draw Clean, Compact Live Status Banner at Top
     double pdr = (safetyPacketsRouted > 0) ? (100.0 * safetyPacketsDelivered / safetyPacketsRouted) : 100.0;
     std::stringstream banner;
-    banner << "SDN TOPOLOGY: 4 RSUs | 2 Fog Clusters | Flow Rules: " << globalFlowTable.size()
-           << " | Detours Active: " << detoursActivated
-           << " | Bypassed: " << untrustedLinksBypassed
-           << " | Safety PDR: " << std::fixed << std::setprecision(1) << pdr << "%";
+    banner << "SDN: 4 RSUs | 2 Fogs | PDR: " << std::fixed << std::setprecision(1) << pdr << "%";
+    if (untrustedLinksBypassed > 0) {
+        banner << " | Bypassed: " << untrustedLinksBypassed;
+    }
 
     cTextFigure* bannerText = new cTextFigure("sdn_status_banner");
-    bannerText->setPosition(cFigure::Point(118.0, 1.0));
+    bannerText->setPosition(cFigure::Point(posX, 2.0));
     bannerText->setText(banner.str().c_str());
-    bannerText->setColor(cFigure::Color("black"));
-    bannerText->setFont(cFigure::Font("Arial", 9, cFigure::FONT_BOLD));
+    bannerText->setColor(cFigure::Color("midnightblue"));
+    bannerText->setFont(cFigure::Font("", 7, cFigure::FONT_BOLD));
+    bannerText->setAnchor(cFigure::ANCHOR_CENTER);
+    bannerText->setHalo(true);
     group->addFigure(bannerText);
 
     root->addFigure(group);

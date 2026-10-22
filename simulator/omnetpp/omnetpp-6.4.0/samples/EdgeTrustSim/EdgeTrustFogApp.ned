@@ -4,7 +4,7 @@ simple EdgeTrustFogApp
 {
     parameters:
         @class(veins::EdgeTrustFogApp);
-        @display("i=device/server;is=m");
+        @display("i=device/server;is=s");
         int fogId = default(0);
         double fogSyncInterval @unit(s) = default(2.0s);
         double conflictTolerance = default(0.20);
