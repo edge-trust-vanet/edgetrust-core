@@ -328,9 +328,9 @@ If you utilize this simulation framework, architecture, or benchmark dataset in 
 
 ## Research Team and Institutional Affiliation
 
-This project was developed under the supervision of **Ms. Neethu M R** at **Amrita Vishwa Vidyapeetham, Amrita School of Computing, Coimbatore, India**:
+This project was developed under the supervision of **Dr. Neethu M R** at **Amrita Vishwa Vidyapeetham, Amrita School of Computing, Coimbatore, India**:
 
-- **Ms. Neethu M R** - *Project Guide & Assistant Professor, Department of Computer Science and Engineering* (`mr_neethu@cb.amrita.edu`)
+- **Dr. Neethu M R** - *Project Guide & Assistant Professor, Department of Computer Science and Engineering* (`mr_neethu@cb.amrita.edu`)
 - **Madisetty Mounik Sai** - *Undergraduate Researcher* (`cb.sc.u4cse23561@cb.students.amrita.edu`)
 - **Edavalapati Aashiq** - *Undergraduate Researcher* (`cb.sc.u4cse23560@cb.students.amrita.edu`)
 - **Chitturi Vivek Vardhan** - *Undergraduate Researcher* (`cb.sc.u4cse23360@cb.students.amrita.edu`)
