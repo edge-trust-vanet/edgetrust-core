@@ -134,13 +134,9 @@ void EdgeTrustVehicleApp::initialize(int stage)
             if (attackType > 0) isMalicious = true;
         }
 
-        if (enableOBUHeuristicFilter) {
-            char badge[96];
-            snprintf(badge, sizeof(badge), "V%d: OBU Heuristic Guard Active", vehicleId);
-            findHost()->getDisplayString().setTagArg("t", 0, badge);
-        } else {
-            findHost()->getDisplayString().setTagArg("t", 0, "Initializing OBU...");
-        }
+        char badge[16];
+        snprintf(badge, sizeof(badge), "V%d", vehicleId);
+        findHost()->getDisplayString().setTagArg("t", 0, badge);
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
         findHost()->getDisplayString().setTagArg("i", 1, "green");
@@ -470,13 +466,15 @@ void EdgeTrustVehicleApp::populateEdgeTrustMessage(EdgeTrustSafetyMessage* bsm)
             default:
                 break;
         }
+        char attackBadge[24];
+        snprintf(attackBadge, sizeof(attackBadge), "V%d [ATTACK]", vehicleId);
+        findHost()->getDisplayString().setTagArg("t", 0, attackBadge);
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "red");
         findHost()->getDisplayString().setTagArg("i", 1, "red");
     } else {
-        // Legitimate vehicle or pre-attack stage: persistent status badge + bubble
-        char tagStr[96];
-        snprintf(tagStr, sizeof(tagStr), "V%d: Legitimate (%.1f m/s)", vehicleId, spdMag);
+        char tagStr[16];
+        snprintf(tagStr, sizeof(tagStr), "V%d", vehicleId);
         findHost()->getDisplayString().setTagArg("t", 0, tagStr);
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");

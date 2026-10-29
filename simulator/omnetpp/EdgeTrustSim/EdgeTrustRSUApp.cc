@@ -110,9 +110,9 @@ void EdgeTrustRSUApp::initialize(int stage)
             }
         }
 
-        std::string sectorName = (rsuId < 2) ? ("Grid 1 Sector (RSU " + std::to_string(rsuId) + ")") : ("Grid 2 Sector (RSU " + std::to_string(rsuId) + ")");
+        std::string sectorName = (rsuId < 2) ? ("Grid 1 Sector " + std::to_string(rsuId)) : ("Grid 2 Sector " + std::to_string(rsuId));
         std::string modelName = (mlModel == "logistic_regression" || mlModel == "lr") ? "Logistic Regression" : "Random Forest";
-        std::string initBadge = "RSU-" + std::to_string(rsuId) + " [" + sectorName + " | " + modelName + " Active]";
+        std::string initBadge = "RSU " + std::to_string(rsuId);
         findHost()->getDisplayString().setTagArg("t", 0, initBadge.c_str());
         findHost()->getDisplayString().setTagArg("t", 1, "t");
         findHost()->getDisplayString().setTagArg("t", 2, "darkgreen");
@@ -573,10 +573,14 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
     std::string arrowColor = (verdict == "BLOCK") ? "red" : (verdict == "WARN" ? "orange" : "green");
     addTransmissionArrow(senderVisualPos, rsuVisualPos, arrowColor);
 
-    char badge[180];
-    snprintf(badge, sizeof(badge), "RSU-%d (%s) [%s: %s V%d | %s: %d%% | Trust: %.2f]",
-             rsuId, (rsuId == 0 ? "Grid 1" : "Grid 2"), modelDisplayName.c_str(), verdict.c_str(), senderId,
-             (mlPred == 1 ? "MAL" : "NORM"), (int)(classConfidence * 100), rec.trustScore);
+    char badge[48];
+    if (verdict == "BLOCK") {
+        snprintf(badge, sizeof(badge), "RSU %d [BLOCK V%d]", rsuId, senderId);
+    } else if (verdict == "WARN") {
+        snprintf(badge, sizeof(badge), "RSU %d [WARN V%d]", rsuId, senderId);
+    } else {
+        snprintf(badge, sizeof(badge), "RSU %d", rsuId);
+    }
     findHost()->getDisplayString().setTagArg("t", 0, badge);
     findHost()->getDisplayString().setTagArg("t", 1, "t");
     findHost()->getDisplayString().setTagArg("t", 2, (verdict == "BLOCK" ? "red" : (verdict == "WARN" ? "orange" : "darkgreen")));
@@ -993,20 +997,8 @@ void EdgeTrustRSUApp::updateI2ICanvasVisual(const std::string& type, const std::
     line->setStart(cFigure::Point(p0.x, p0.y));
     line->setEnd(cFigure::Point(p1.x, p1.y));
     line->setLineColor(cFigure::Color(color.c_str()));
-    line->setLineWidth(type == "alert" ? 1.6 : 1.0);
+    line->setLineWidth(type == "alert" ? 1.8 : 1.0);
     line->setLineStyle(cFigure::LINE_DASHED);
-
-    cTextFigure* label = dynamic_cast<cTextFigure*>(root->getFigure("i2i_backbone_label"));
-    if (!label) {
-        label = new cTextFigure("i2i_backbone_label");
-        root->addFigure(label);
-    }
-    label->setPosition(cFigure::Point((p0.x + p1.x) / 2.0, ((p0.y + p1.y) / 2.0) - 6.0));
-    label->setText(infoText.c_str());
-    label->setColor(cFigure::Color(color.c_str()));
-    label->setFont(cFigure::Font("", 6, cFigure::FONT_BOLD));
-    label->setAnchor(cFigure::ANCHOR_CENTER);
-    label->setHalo(true);
 }
 
 void EdgeTrustRSUApp::clearI2ICanvasVisual()
