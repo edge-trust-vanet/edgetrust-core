@@ -292,58 +292,7 @@ Fig.~\ref{fig:arch_overview} illustrates the vertical physical tiering of the sy
 
 \begin{figure*}[t]
 \centering
-\begin{minipage}{0.94\textwidth}
-\centering
-\fbox{
-\begin{minipage}{0.96\textwidth}
-\footnotesize
-\textbf{End-to-End Operational Workflow of EdgeTrust-VANET}
-\vspace{4pt}
-\hrule
-\vspace{6pt}
-\begin{tabular}{ccccc}
-\textbf{[Inbound BSM]} & $\longrightarrow$ & \textbf{[Tier 1: Vehicle OBU Firewall]} & $\longrightarrow$ & \textbf{[Local Mitigation]} \\
-Telemetry: $(x, y, v, \theta, a, t_{\text{msg}})$ & & Sanity Checks: $v \le v_{\text{max}}$, $|a| \le a_{\text{max}}$, $|j| \le j_{\text{max}}$ & & If Implausible: Drop frame locally; \\
-& & Kinematic Displacement: $\Delta d \le \Delta d_{\text{max}} + \epsilon_{\text{GPS}}$ & & Halt multi-hop forwarding (-34.2\% load) \\
-& & Heading Continuity: $\Delta \theta \le \omega_{\text{max}} \Delta t$ & & \\
-\end{tabular}
-
-\vspace{4pt}
-\centering $\Big\downarrow$ \textit{(Valid BSMs Transmitted over IEEE 802.11p DSRC Wireless Channel to Serving RSU)}
-
-\vspace{4pt}
-\begin{tabular}{ccccc}
-\textbf{[Tier 2: Edge RSU Processing]} & $\longrightarrow$ & \textbf{[C++ Inference Engine]} & $\longrightarrow$ & \textbf{[EMA Trust Engine]} \\
-85m Radio Radius; Priority Queue: & & 14-Feature Extraction ($\mathbf{x} \in \mathbb{R}^{14}$); & & Exponential Moving Average ($\alpha=0.70$); \\
-Class 1: Safety Alerts (Instant) & & Native Compiled C++ Headers: & & Dead-Reckoning Projection: $\hat{\mathbf{P}} = \mathbf{P} + \mathbf{v}\tau + \frac{1}{2}\mathbf{a}\tau^2$; \\
-Class 2: Fog/SDN Control (Medium) & & - Logistic Regression ($0.38\,\mu\text{s}$) & & Staleness Penalty: $\gamma(\tau) = e^{-\lambda \max(0, \tau - 0.300)}$; \\
-Class 3: Best Effort (Low) & & - AdaBoost Predictor ($5.00\,\mu\text{s}$) & & Output Trust Score: $T_t \in [0, 1]$ \\
-\end{tabular}
-
-\vspace{4pt}
-\centering $\Big\downarrow$ \textit{(Regional Handover Trigger: Inter-RSU Trust Score Divergence $|T_A - T_B| > 0.20$)}
-
-\vspace{4pt}
-\begin{tabular}{ccccc}
-\textbf{[Tier 3: Regional Fog Consensus]} & $\longrightarrow$ & \textbf{[Consensus Calculation]} & $\longrightarrow$ & \textbf{[Safety Override]} \\
-Clusters 2 RSUs per Fog Domain; & & Observation-Weighted Consensus: & & Deterministic Override Rule: \\
-Maintains 10-Second Sliding Window; & & $T_{\text{Fog}} = \frac{N_A T_A + N_B T_B}{N_A + N_B}$ & & If $\min(T_A, T_B) < 0.40 \implies T_{\text{Fog}} = \min(T_A, T_B)$; \\
-Serializes \texttt{checkpoint\_fog\_ledger.json} & & & & Prevents attack evidence dilution \\
-\end{tabular}
-
-\vspace{4pt}
-\centering $\Big\downarrow$ \textit{(Global Forwarding Control: Trust State Dispatched to SDN Controller)}
-
-\vspace{4pt}
-\begin{tabular}{ccccc}
-\textbf{[Tier 4: Central SDN Controller]} & $\longrightarrow$ & \textbf{[Modified Dijkstra Routing]} & $\longrightarrow$ & \textbf{[Network Mitigation Action]} \\
-OpenFlow Controller with Global Graph & & Trust-Penalized Shortest Path Cost: & & \textbf{Zone 1 ($T \ge 0.70$):} \textsc{Accept} (Cost: $d_{ij} / (T_i T_j)$) \\
-Maintains Dynamic Topology Flow Tables; & & $C_{ij} = d_{ij} / \max(T_v, \epsilon)$ & & \textbf{Zone 2 ($0.40 \le T < 0.70$):} \textsc{DegradedRoute} (Detour) \\
-Controls Global Revocation Lists (CRL) & & Evaluated over active vehicular paths & & \textbf{Zone 3 ($T < 0.40$):} \textsc{Quarantine} (CRL Revocation) \\
-\end{tabular}
-\end{minipage}
-}
-\end{minipage}
+\includegraphics[width=\textwidth]{figures/workflow_flowchart.png}
 \caption{End-to-End Operational Workflow Diagram of the EdgeTrust-VANET Framework, illustrating the complete progression of Basic Safety Messages from Vehicle OBU generation through Edge RSU machine learning inference, Regional Fog Bayesian consensus, and Central SDN traffic engineering.}
 \label{fig:workflow_flowchart}
 \end{figure*}
@@ -450,21 +399,30 @@ This section details the mathematical formulations governing physical kinematic 
 In the vehicular domain, road vehicle mobility is strictly bounded by the laws of classical Newtonian mechanics, tire-road surface friction coefficients ($\mu \approx 0.8$ on dry asphalt), and human mechanical steering limits. The Tier~1 OBU Heuristic Firewall enforces three physical constraints on each received telemetry packet:
 
 \begin{equation}
-v_j(t) \in [0, v_{\text{max}}], \quad |a_j(t)| \le a_{\text{max}}, \quad \left|\frac{\Delta a_j(t)}{\Delta t}\right| \le j_{\text{max}}
+\begin{aligned}
+v_j(t) &\in [0, v_{\text{max}}], \quad |a_j(t)| \le a_{\text{max}}, \\
+\left|\frac{\Delta a_j(t)}{\Delta t}\right| &\le j_{\text{max}}
+\end{aligned}
 \label{eq:kin_bounds}
 \end{equation}
 where $v_j(t)$ is the reported instantaneous speed, $a_j(t)$ is the reported longitudinal acceleration, and the time derivative represents vehicular jerk. The upper bounds are configured to physical extremes: $v_{\text{max}} = 50.0\,\text{m/s}$ (180~km/h), $a_{\text{max}} = 8.0\,\text{m/s}^2$ (maximum emergency braking deceleration achievable on high-friction pavement), and $j_{\text{max}} = 10.0\,\text{m/s}^3$ (maximum mechanical suspension jerk limit).
 
 To eliminate teleportation and sudden coordinate jump attacks (VeReMi Attacks 1, 2, and 7), the planar Euclidean displacement $\Delta d$ between two consecutive beacons received from vehicle $j$ separated by elapsed duration $\Delta t = t_{\text{curr}} - t_{\text{last}}$ must satisfy the Kinematic Displacement Bound:
 \begin{equation}
-\Delta d = \|\mathbf{P}_j(t_{\text{curr}}) - \mathbf{P}_j(t_{\text{last}})\| \le v_j(t_{\text{last}})\Delta t + \frac{1}{2}a_{\text{max}}(\Delta t)^2 + \epsilon_{\text{GPS}}
+\begin{aligned}
+\Delta d &= \|\mathbf{P}_j(t_{\text{curr}}) - \mathbf{P}_j(t_{\text{last}})\| \\
+&\le v_j(t_{\text{last}})\Delta t + \frac{1}{2}a_{\text{max}}(\Delta t)^2 + \epsilon_{\text{GPS}}
+\end{aligned}
 \label{eq:disp_bound}
 \end{equation}
 where $\mathbf{P}_j(t) = [p_x(t), p_y(t)]^T$ denotes the reported Cartesian coordinates in meters, and $\epsilon_{\text{GPS}} = 2.5\,\text{m}$ represents the 95th percentile horizontal dilution of precision (HDOP) uncertainty inherent to standard civilian GNSS receivers.
 
 Furthermore, directional heading changes must satisfy angular yaw rate continuity:
 \begin{equation}
-\Delta \theta_j = \min\left(|\theta_{\text{curr}} - \theta_{\text{last}}|, \; 360^\circ - |\theta_{\text{curr}} - \theta_{\text{last}}|\right) \le \omega_{\text{max}} \Delta t
+\begin{aligned}
+\Delta \theta_j &= \min\left(|\theta_{\text{curr}} - \theta_{\text{last}}|, \; 360^\circ - |\theta_{\text{curr}} - \theta_{\text{last}}|\right) \\
+&\le \omega_{\text{max}} \Delta t
+\end{aligned}
 \label{eq:heading_bound}
 \end{equation}
 where $\theta \in [0, 360^\circ)$ represents the compass heading angle, and $\omega_{\text{max}} = 45^\circ/\text{s}$ denotes the maximum physical angular yaw rate of passenger vehicles under non-spinout conditions. Finally, centripetal acceleration on curved roadway segments with radius $R$ is constrained by road adhesion:
@@ -565,13 +523,13 @@ with decay coefficient $\lambda = 1.5\,\text{s}^{-1}$.
 
 To demonstrate the deterministic isolating power of Equation~(\ref{eq:ema_trust}), consider an initially reputable vehicle ($T_0 = 1.000$) that suddenly initiates False Data Injection attacks, transmitting malicious payloads resulting in evidence scores $E_t = 0.10$ under zero transmission delay ($\gamma(\tau) = 1.0$). Applying $\alpha = 0.70$:
 \begin{align}
-\text{Beacon 1: } & T_1 = 0.70(1.0000) + 0.30(0.10) = 0.7300 \enskip (\text{Trusted}) \nonumber \\
-\text{Beacon 2: } & T_2 = 0.70(0.7300) + 0.30(0.10) = 0.5410 \enskip (\text{Degraded}) \nonumber \\
-\text{Beacon 3: } & T_3 = 0.70(0.5410) + 0.30(0.10) = 0.4087 \enskip (\text{Degraded}) \nonumber \\
-\text{Beacon 4: } & T_4 = 0.70(0.4087) + 0.30(0.10) = \mathbf{0.3161} \enskip (\mathbf{Quarantine})
+T_1 &= 0.70(1.000) + 0.30(0.10) = 0.730 \quad [\text{Trusted}] \nonumber \\
+T_2 &= 0.70(0.730) + 0.30(0.10) = 0.541 \quad [\text{Degraded}] \nonumber \\
+T_3 &= 0.70(0.541) + 0.30(0.10) = 0.409 \quad [\text{Degraded}] \nonumber \\
+T_4 &= 0.70(0.409) + 0.30(0.10) = \mathbf{0.316} \quad [\mathbf{Quarantine}]
 \label{eq:worked_decay}
 \end{align}
-As proven in Equation~(\ref{eq:worked_decay}), the vehicle is demoted to the Degraded Forwarding Zone ($T < 0.70$) after 2 beacons (0.2~s at 10~Hz), and is deterministically dropped into the Quarantine Zone ($T_4 = 0.3161 < 0.40$) on the 4th beacon (0.4~s).
+As proven in Equation~(\ref{eq:worked_decay}), the vehicle is demoted to the Degraded Forwarding Zone ($T < 0.70$) after 2 beacons (0.2~s at 10~Hz), and is deterministically dropped into the Quarantine Zone ($T_4 = 0.316 < 0.40$) on the 4th beacon (0.4~s).
 
 \subsection{Tier 3: Inter-RSU Divergence and Beta-Bayesian Fog Consensus}
 
@@ -587,7 +545,10 @@ T_{\text{Fog}}(j) = \frac{N_A T_{\text{RSU}_A}(j) + N_B T_{\text{RSU}_B}(j)}{N_A
 \end{equation}
 where $N_A$ and $N_B$ denote verified packet observation counts in a 10-second sliding window. Crucially, if either RSU reports active attack behavior, a deterministic safety-first override is enforced:
 \begin{equation}
-\min(T_A(j), T_B(j)) < T_{\text{block}} \ (0.40) \implies T_{\text{Fog}}(j) = \min(T_A(j), T_B(j))
+\begin{aligned}
+&\min(T_A(j), T_B(j)) < T_{\text{block}} \ (0.40) \\
+&\quad \implies T_{\text{Fog}}(j) = \min(T_A(j), T_B(j))
+\end{aligned}
 \label{eq:safety_override}
 \end{equation}
 
@@ -596,9 +557,9 @@ where $N_A$ and $N_B$ denote verified packet observation counts in a 10-second s
 The central SDN controller models the vehicular communication mesh as a directed graph $G = (V, E)$. To detour traffic around compromised or degrading nodes, the controller computes link costs $C_{ij}$ using a piecewise trust-penalized formulation:
 \begin{equation}
 C_{ij} = \begin{cases} 
-\dfrac{d_{ij}}{T_i \cdot T_j}, & \text{if } T_i, T_j \ge 0.70 \\[8pt] 
-\dfrac{d_{ij}}{0.40 \cdot \min(T_i, T_j)}, & \text{if } 0.40 \le T_i, T_j < 0.70 \\[8pt] 
-\infty, & \text{if } \min(T_i, T_j) < 0.40 
+\dfrac{d_{ij}}{T_i \cdot T_j}, & T_i, T_j \ge 0.70 \\[7pt] 
+\dfrac{d_{ij}}{0.40 \cdot \min(T_i, T_j)}, & 0.40 \le T_i, T_j < 0.70 \\[7pt] 
+\infty, & \min(T_i, T_j) < 0.40 
 \end{cases}
 \label{eq:sdn_cost}
 \end{equation}
@@ -620,14 +581,20 @@ Differentiating $R(T)$ with respect to $T$ reveals that the optimal bifurcation 
 \end{equation}
 Analyzing the empirical ROC curve across 23,970 records demonstrates that the slope condition in Equation~(\ref{eq:roc_slope}) is satisfied precisely at $T = 0.40$.
 
-Furthermore, consider the recovery probability $P_{\text{recover}}(k)$ of an honest vehicle whose trust score momentarily dips to $T_{\text{curr}}$ due to severe GNSS multipath noise. If the vehicle broadcasts completely honest beacons ($E_t = 1.0$), its trust score after $k$ steps is:
+Furthermore, consider the recovery probability $P_{\text{recover}}(k)$ of an honest vehicle whose trust score momentarily dips to $T_{\text{curr}} due to severe GNSS multipath noise. If the vehicle broadcasts completely honest beacons ($E_t = 1.0$), its trust score after $k$ steps is:
 \begin{equation}
 T(k) = T_{\text{curr}} \cdot \alpha^k + (1 - \alpha^k)
 \label{eq:recovery}
 \end{equation}
 Setting $\alpha = 0.70$ and $T_{\text{curr}} = 0.40$, after $k = 4$ honest beacons:
-$$T(4) = 0.40(0.70)^4 + (1 - 0.70^4) = 0.40(0.2401) + 0.7599 = \mathbf{0.8559} \ge 0.70$$
-An honest commuter recovering from sensor noise returns to fully trusted status within 4 beacons (0.4~s). Conversely, for an adversary trapped at $T < 0.40$, the mathematical probability of generating genuine kinematic consistency across 14 independent features across four consecutive beacons without triggering Tier~1 or Tier~2 rules is $p < 0.0012$. Thus, $T_{\text{block}} = 0.40$ represents the exact mathematical boundary separating recoverable physical noise from irrevocable adversarial compromise.
+\begin{equation}
+\begin{aligned}
+T(4) &= 0.40(0.70)^4 + (1 - 0.70^4) \\
+     &= 0.40(0.2401) + 0.7599 = \mathbf{0.8559} \ge 0.70
+\end{aligned}
+\label{eq:recovery_calc}
+\end{equation}
+As computed in Equation~(\ref{eq:recovery_calc}), an honest commuter recovering from sensor noise returns to fully trusted status within 4 beacons (0.4~s). Conversely, for an adversary trapped at $T < 0.40$, the mathematical probability of generating genuine kinematic consistency across 14 independent features across four consecutive beacons without triggering Tier~1 or Tier~2 rules is $p < 0.0012$. Thus, $T_{\text{block}} = 0.40$ represents the exact mathematical boundary separating recoverable physical noise from irrevocable adversarial compromise.
 
 % =========================================================
 % V. EXPERIMENTAL SETUP AND THREAT MODELING
