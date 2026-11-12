@@ -459,6 +459,12 @@ void EdgeTrustFogApp::processPeriodicRegionalAggregation()
     std::stringstream info;
     info << "[Fog " << fogId << "] " << regionalLedger.size() << " Nodes | CRL: " << regionalRevocationList.size();
 
+    char fogBadge[64];
+    snprintf(fogBadge, sizeof(fogBadge), "Fog %d [Ledger: %zu]", fogId, regionalLedger.size());
+    getDisplayString().setTagArg("t", 0, fogBadge);
+    getDisplayString().setTagArg("t", 1, "t");
+    getDisplayString().setTagArg("t", 2, "darkgreen");
+
     updateFogCanvasVisual("sync", "seagreen", info.str());
 }
 
@@ -819,7 +825,7 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
         line->setStart(cFigure::Point(pRsu.x, pRsu.y));
         line->setEnd(cFigure::Point(pFog.x, pFog.y));
         line->setLineColor(cFigure::Color(color.c_str()));
-        line->setLineWidth(type == "revocation" ? 1.6 : 1.0);
+        line->setLineWidth(type == "revocation" ? 2.2 : 1.5);
         line->setLineStyle(type == "revocation" ? cFigure::LINE_SOLID : cFigure::LINE_DASHED);
     }
 
@@ -836,7 +842,7 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
             trunk->setStart(cFigure::Point(pFog.x, pFog.y));
             trunk->setEnd(cFigure::Point(pFog1.x, pFog1.y));
             trunk->setLineColor(cFigure::Color("mediumpurple"));
-            trunk->setLineWidth(1.2);
+            trunk->setLineWidth(2.0);
             trunk->setLineStyle(cFigure::LINE_SOLID);
         }
     }

@@ -185,6 +185,11 @@ class VEINS_API EdgeTrustRSUApp : public DemoBaseApplLayer {
     std::queue<EdgeTrustSDNPacket*> sdnNormalPriorityQueue; // Class 1: Trust/Control
     std::queue<EdgeTrustSDNPacket*> sdnBestEffortQueue;    // Class 2: Telemetry/Best-Effort
 
+    // Fault injection
+    double nodeFailTime = -1.0;
+    bool isNodeCrashed = false;
+    cMessage* nodeCrashTimerMsg = nullptr;
+
     int totalSDNPacketsOriginated = 0;
     int totalSDNPacketsForwarded = 0;
     int totalSDNPacketsDelivered = 0;

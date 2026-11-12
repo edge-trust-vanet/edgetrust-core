@@ -100,6 +100,7 @@ void EdgeTrustRSUApp::initialize(int stage)
         defaultPeerRsuId = hasPar("defaultPeerRsuId") ? par("defaultPeerRsuId").intValue() : ((rsuId % 2 == 0) ? (rsuId + 1) : (rsuId - 1));
         enableSDN = hasPar("enableSDN") ? par("enableSDN").boolValue() : true;
         sdnPacketInterval = hasPar("sdnPacketInterval") ? par("sdnPacketInterval").doubleValue() : 2.0;
+        nodeFailTime = hasPar("nodeFailTime") ? par("nodeFailTime").doubleValue() : -1.0;
 
         cModule* parentMod = findHost()->getParentModule();
         if (enableFogIntegration && parentMod) {
@@ -143,6 +144,11 @@ void EdgeTrustRSUApp::initialize(int stage)
             sdnPacketTimerMsg = new cMessage("sdnPacketTimer");
             simtime_t sdnOffset = SimTime(1.5 + (rsuId * 0.4));
             scheduleAt(simTime() + sdnOffset, sdnPacketTimerMsg);
+        }
+
+        if (nodeFailTime >= 0.0) {
+            nodeCrashTimerMsg = new cMessage("nodeCrashTimer");
+            scheduleAt(simTime() + nodeFailTime, nodeCrashTimerMsg);
         }
 
         std::lock_guard<std::mutex> lock(csvFileMutex);
@@ -195,6 +201,40 @@ void EdgeTrustRSUApp::initialize(int stage)
 
 void EdgeTrustRSUApp::handleSelfMsg(cMessage* msg)
 {
+    if (msg == nodeCrashTimerMsg) {
+        isNodeCrashed = true;
+        findHost()->getDisplayString().setTagArg("t", 0, ("RSU " + std::to_string(rsuId) + " [CRASHED]").c_str());
+        findHost()->getDisplayString().setTagArg("t", 2, "red");
+        findHost()->getDisplayString().setTagArg("i", 1, "red");
+        EV_WARN << "============================================================" << endl;
+        EV_WARN << " [t=" << simTime() << "s] [RSU HARDWARE FAULT] RSU " << rsuId
+                << " EXPERIENCED FATAL HARDWARE FAILURE / CRASH!" << endl;
+        EV_WARN << "   -> Radio frontend shut down. All inbound/outbound packets severed." << endl;
+        EV_WARN << "============================================================" << endl;
+
+        if (interRsuSyncTimerMsg) {
+            cancelAndDelete(interRsuSyncTimerMsg);
+            interRsuSyncTimerMsg = nullptr;
+        }
+        if (sdnPacketTimerMsg) {
+            cancelAndDelete(sdnPacketTimerMsg);
+            sdnPacketTimerMsg = nullptr;
+        }
+        if (checkpointTimerMsg) {
+            cancelAndDelete(checkpointTimerMsg);
+            checkpointTimerMsg = nullptr;
+        }
+        return;
+    }
+    if (isNodeCrashed) {
+        if (msg == interRsuSyncTimerMsg) interRsuSyncTimerMsg = nullptr;
+        if (msg == sdnPacketTimerMsg) sdnPacketTimerMsg = nullptr;
+        if (msg == checkpointTimerMsg) checkpointTimerMsg = nullptr;
+        if (msg == nodeCrashTimerMsg) nodeCrashTimerMsg = nullptr;
+        delete msg;
+        return;
+    }
+
     if (msg == interRsuSyncTimerMsg) {
         if (enableInterRSU) {
             sendInterRSUTrustSync();
@@ -221,6 +261,8 @@ void EdgeTrustRSUApp::handleSelfMsg(cMessage* msg)
 
 void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
 {
+    if (isNodeCrashed) return;
+
     EdgeTrustSafetyMessage* emsg = dynamic_cast<EdgeTrustSafetyMessage*>(bsm);
 
     int senderId = -1;
@@ -609,6 +651,19 @@ void EdgeTrustRSUApp::onBSM(DemoSafetyMessage* bsm)
 
     if (verdict != "ACCEPT" && isPrimaryServing) {
         broadcastSafetyAdvisory(senderId, verdict, classConfidence);
+    }
+
+    if (enableSDN && (verdict == "BLOCK" || isMal)) {
+        cModule* parentMod = findHost()->getParentModule();
+        if (parentMod) {
+            cModule* sdnMod = parentMod->getSubmodule("sdn");
+            if (sdnMod) {
+                EdgeTrustSDNController* sdn = dynamic_cast<EdgeTrustSDNController*>(sdnMod);
+                if (sdn) {
+                    sdn->notifyNodeThreat(rsuId, senderId, attackType, classConfidence, "ML Attack Blocked at RSU");
+                }
+            }
+        }
     }
 
     logVehicleFeatures(senderId, reportedPos.x, reportedPos.y,
@@ -1275,6 +1330,8 @@ bool EdgeTrustRSUApp::loadCheckpoint(const std::string& filepath)
 
 void EdgeTrustRSUApp::sendSDNTransitPacket()
 {
+    if (isNodeCrashed) return;
+
     cModule* parent = findHost()->getParentModule();
     if (!parent) return;
 
@@ -1333,6 +1390,11 @@ void EdgeTrustRSUApp::processSDNQoSTransmission()
 
 void EdgeTrustRSUApp::forwardSDNPacket(EdgeTrustSDNPacket* pkt)
 {
+    if (isNodeCrashed) {
+        delete pkt;
+        return;
+    }
+
     cModule* parent = findHost()->getParentModule();
     if (!parent) {
         delete pkt;
@@ -1403,6 +1465,11 @@ void EdgeTrustRSUApp::receiveSDNPacket(EdgeTrustSDNPacket* pkt)
     Enter_Method_Silent();
     if (pkt) {
         take(pkt);
+    }
+    if (isNodeCrashed) {
+        totalSDNPacketsDropped++;
+        delete pkt;
+        return;
     }
     if (pkt->getDestRsuId() == rsuId) {
         totalSDNPacketsDelivered++;
@@ -1481,6 +1548,10 @@ void EdgeTrustRSUApp::finish()
         cancelAndDelete(sdnPacketTimerMsg);
         sdnPacketTimerMsg = nullptr;
     }
+    if (nodeCrashTimerMsg) {
+        cancelAndDelete(nodeCrashTimerMsg);
+        nodeCrashTimerMsg = nullptr;
+    }
 
     while (!sdnHighPriorityQueue.empty()) {
         delete sdnHighPriorityQueue.front();
@@ -1520,6 +1591,8 @@ void EdgeTrustRSUApp::finish()
     recordScalar("edgeTrust_sdnPacketsForwarded", totalSDNPacketsForwarded);
     recordScalar("edgeTrust_sdnPacketsDelivered", totalSDNPacketsDelivered);
     recordScalar("edgeTrust_sdnDetoursExecuted", totalSDNDetoursExecuted);
+    recordScalar("edgeTrust_sdnPacketsDropped", totalSDNPacketsDropped);
+    recordScalar("edgeTrust_nodeCrashed", isNodeCrashed ? 1 : 0);
 }
 
 } // namespace veins

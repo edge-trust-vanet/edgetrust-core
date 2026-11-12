@@ -24,4 +24,5 @@ simple EdgeTrustRSUApp extends DemoBaseApplLayer
         bool enableSDN = default(true);
         double sdnPacketInterval @unit(s) = default(2.0s);
         int defaultPeerRsuId = default(1);
+        double nodeFailTime @unit(s) = default(-1s);
 }

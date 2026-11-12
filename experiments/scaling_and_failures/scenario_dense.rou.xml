@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <!-- Scaled Dense Fleet (~80-100 vehicles, high channel contention) -->
+    <vType id="dense_car" accel="2.6" decel="4.5" length="4.5" maxSpeed="15.0"/>
+
+    <flow id="f_w_e" type="dense_car" begin="0.00" end="3600.00" period="2.00" from="-E11" to="E21" departSpeed="max"/>
+    <flow id="f_e_w" type="dense_car" begin="0.00" end="3600.00" period="2.00" from="-E21" to="E11" departSpeed="max"/>
+    <flow id="f_g1_ns" type="dense_car" begin="0.00" end="3600.00" period="2.50" from="-E12" to="E13" departSpeed="max"/>
+    <flow id="f_g1_sn" type="dense_car" begin="0.00" end="3600.00" period="2.50" from="-E13" to="E12" departSpeed="max"/>
+    <flow id="f_g2_ns" type="dense_car" begin="0.00" end="3600.00" period="2.50" from="-E22" to="E23" departSpeed="max"/>
+    <flow id="f_g2_sn" type="dense_car" begin="0.00" end="3600.00" period="2.50" from="-E23" to="E22" departSpeed="max"/>
+    <flow id="f_turn_w_g1n" type="dense_car" begin="0.00" end="3600.00" period="3.00" from="-E11" to="E12" departSpeed="max"/>
+    <flow id="f_turn_e_g2s" type="dense_car" begin="0.00" end="3600.00" period="3.00" from="-E21" to="E23" departSpeed="max"/>
+    <flow id="f_turn_w_g2s" type="dense_car" begin="0.00" end="3600.00" period="3.50" from="-E11" to="E23" departSpeed="max"/>
+    <flow id="f_turn_e_g1n" type="dense_car" begin="0.00" end="3600.00" period="3.50" from="-E21" to="E12" departSpeed="max"/>
+</routes>

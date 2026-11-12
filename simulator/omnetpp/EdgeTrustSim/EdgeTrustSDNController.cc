@@ -29,15 +29,32 @@ void EdgeTrustSDNController::initialize(int stage)
         posY = hasPar("posY") ? par("posY").doubleValue() : 8.0;
         posZ = hasPar("posZ") ? par("posZ").doubleValue() : 15.0;
 
+        failLinkTime = hasPar("failLinkTime") ? par("failLinkTime").doubleValue() : -1.0;
+        failLinkSrc = hasPar("failLinkSrc") ? par("failLinkSrc").intValue() : -1;
+        failLinkDst = hasPar("failLinkDst") ? par("failLinkDst").intValue() : -1;
+        failNodeTime = hasPar("failNodeTime") ? par("failNodeTime").doubleValue() : -1.0;
+        failNodeId = hasPar("failNodeId") ? par("failNodeId").intValue() : -1;
+
         getDisplayString().setTagArg("p", 0, std::to_string((int)posX).c_str());
         getDisplayString().setTagArg("p", 1, std::to_string((int)posY).c_str());
-        getDisplayString().setTagArg("is", 0, "s");
-        getDisplayString().setTagArg("t", 0, "SDN Controller");
+        getDisplayString().setTagArg("is", 0, "m");
+        getDisplayString().setTagArg("t", 0, "SDN [Active]");
+        getDisplayString().setTagArg("t", 1, "t");
+        getDisplayString().setTagArg("t", 2, "blue");
 
         initializeDefaultTopology();
 
         sdnTickTimerMsg = new cMessage("sdnTickTimer");
         scheduleAt(simTime() + controllerTickInterval, sdnTickTimerMsg);
+
+        if (failLinkTime >= 0.0 && failLinkSrc >= 0 && failLinkDst >= 0) {
+            failLinkTimerMsg = new cMessage("failLinkTimer");
+            scheduleAt(simTime() + failLinkTime, failLinkTimerMsg);
+        }
+        if (failNodeTime >= 0.0 && failNodeId >= 0) {
+            failNodeTimerMsg = new cMessage("failNodeTimer");
+            scheduleAt(simTime() + failNodeTime, failNodeTimerMsg);
+        }
 
         EV_INFO << "============================================================" << endl;
         EV_INFO << " [SDN CONTROLLER INITIALIZED] Tier-4 Centralized Control Plane" << endl;
@@ -175,6 +192,23 @@ void EdgeTrustSDNController::handleMessage(cMessage* msg)
 
         updateSDNCanvasVisual();
         scheduleAt(simTime() + controllerTickInterval, sdnTickTimerMsg);
+    } else if (msg == failLinkTimerMsg) {
+        EV_WARN << "============================================================" << endl;
+        EV_WARN << " [t=" << simTime() << "s] [SDN FAULT INJECTION] Link (" << failLinkSrc
+                << " <-> " << failLinkDst << ") SEVERED / JAMMED!" << endl;
+        EV_WARN << "   -> Triggering trust degradation and automatic detour rerouting..." << endl;
+        EV_WARN << "============================================================" << endl;
+        updateLinkMetrics(failLinkSrc, failLinkDst, 0.05, 0.10, 100.0, 0.99);
+        updateLinkMetrics(failLinkDst, failLinkSrc, 0.05, 0.10, 100.0, 0.99);
+        triggerGlobalRecomputation("Dynamic Link Failure (" + std::to_string(failLinkSrc) + "<->" + std::to_string(failLinkDst) + ")");
+        updateSDNCanvasVisual();
+    } else if (msg == failNodeTimerMsg) {
+        EV_WARN << "============================================================" << endl;
+        EV_WARN << " [t=" << simTime() << "s] [SDN FAULT INJECTION] RSU " << failNodeId
+                << " HARDWARE CRASH / POWER OUTAGE!" << endl;
+        EV_WARN << "   -> Quarantining node and calculating bypass routes..." << endl;
+        EV_WARN << "============================================================" << endl;
+        notifyNodeThreat(-1, failNodeId, 16, 0.99, "Hardware Crash / Outage");
     } else {
         delete msg;
     }
@@ -214,8 +248,8 @@ void EdgeTrustSDNController::notifyNodeThreat(int reporterId, int offendingId, i
     EV_WARN << "   -> Offending Node / Target: " << offendingId << " | Attack Type: " << attackType << endl;
     EV_WARN << "   -> Confidence: " << confidence << " | Reason: " << reason << endl;
 
-    if (offendingId >= 0 && offendingId < numRSUs) {
-        // An entire RSU is compromised / quarantined
+    if (reporterId == -1 && offendingId >= 0 && offendingId < numRSUs) {
+        // Infrastructure Failure: An entire RSU is quarantined / hardware crashed
         quarantinedNodes.insert(offendingId);
         rsuNodes[offendingId].isQuarantined = true;
         for (auto& kv : linkTopology) {
@@ -225,26 +259,13 @@ void EdgeTrustSDNController::notifyNodeThreat(int reporterId, int offendingId, i
             }
         }
         EV_WARN << "   -> SDN ACTION: RSU " << offendingId << " QUARANTINED! All incident links isolated." << endl;
+        triggerGlobalRecomputation("Infrastructure Fault: RSU " + std::to_string(offendingId) + " Quarantined");
+        updateSDNCanvasVisual();
     } else {
         // Vehicle-level threat in reporterId's sector
-        if (reporterId >= 0 && reporterId < numRSUs) {
-            // Penalize links passing through reporterId if attack is severe (e.g. DoS / Blackhole)
-            if (attackType == 2 || attackType == 4 || attackType == 12 || attackType == 16) {
-                for (auto& kv : linkTopology) {
-                    if (kv.first.first == reporterId || kv.first.second == reporterId) {
-                        kv.second.trustScore = std::max(0.10, kv.second.trustScore - 0.35);
-                        if (kv.second.trustScore < linkTrustThreshold) {
-                            kv.second.isCompromised = true;
-                        }
-                    }
-                }
-            }
-        }
+        EV_INFO << "   -> SDN TELEMETRY: Rogue Vehicle " << offendingId << " logged by SDN Controller. Backhaul links intact." << endl;
     }
     EV_WARN << "============================================================" << endl;
-
-    triggerGlobalRecomputation("Threat Incident / Node Quarantine");
-    updateSDNCanvasVisual();
 }
 
 void EdgeTrustSDNController::reportDeliveryOutcome(int srcRsu, int dstRsu, int trafficClass, bool delivered, double latencySec, bool wasDetour)
@@ -260,6 +281,10 @@ void EdgeTrustSDNController::reportDeliveryOutcome(int srcRsu, int dstRsu, int t
         controlPacketsRouted++;
     } else {
         bestEffortPacketsRouted++;
+    }
+
+    if (wasDetour) {
+        detoursActivated++;
     }
 
     if (delivered) {
@@ -534,33 +559,59 @@ void EdgeTrustSDNController::updateSDNCanvasVisual()
 
         if (link.isCompromised || link.trustScore < linkTrustThreshold) {
             line->setLineColor(cFigure::Color("firebrick"));
-            line->setLineWidth(1.6);
+            line->setLineWidth(2.2);
             line->setLineStyle(cFigure::LINE_DASHED);
         } else if (link.trustScore < 0.85) {
             line->setLineColor(cFigure::Color("darkorange"));
-            line->setLineWidth(1.3);
+            line->setLineWidth(1.8);
             line->setLineStyle(cFigure::LINE_DASHED);
         } else {
             line->setLineColor(cFigure::Color("dodgerblue"));
-            line->setLineWidth(1.0);
+            line->setLineWidth(1.4);
             line->setLineStyle(cFigure::LINE_SOLID);
         }
         group->addFigure(line);
     }
 
-    // 2. Draw Clean, Compact Live Status Banner at Top
+    // Connect SDN Controller to the 4 RSUs with dashed control links
+    for (int i = 0; i < numRSUs; ++i) {
+        cLineFigure* ctrlLine = new cLineFigure(("sdn_ctrl_link_" + std::to_string(i)).c_str());
+        ctrlLine->setStart(cFigure::Point(posX, posY));
+        ctrlLine->setEnd(cFigure::Point(rsuNodes[i].pos.x, rsuNodes[i].pos.y));
+        ctrlLine->setLineColor(cFigure::Color(detoursActivated > 0 ? "darkorange" : "dodgerblue"));
+        ctrlLine->setLineWidth(1.0);
+        ctrlLine->setLineStyle(cFigure::LINE_DOTTED);
+        group->addFigure(ctrlLine);
+    }
+
+    // Dynamic SDN Module Badge
     double pdr = (safetyPacketsRouted > 0) ? (100.0 * safetyPacketsDelivered / safetyPacketsRouted) : 100.0;
+    char sdnBadge[96];
+    if (detoursActivated > 0) {
+        snprintf(sdnBadge, sizeof(sdnBadge), "SDN [PDR: %.0f%% | Detour Active | #%d]", pdr, totalPacketsRouted);
+        getDisplayString().setTagArg("t", 2, "darkorange");
+        getDisplayString().setTagArg("i", 1, "orange");
+    } else {
+        snprintf(sdnBadge, sizeof(sdnBadge), "SDN [PDR: %.0f%% | Routed: %d]", pdr, totalPacketsRouted);
+        getDisplayString().setTagArg("t", 2, "blue");
+        getDisplayString().setTagArg("i", 1, "blue");
+    }
+    getDisplayString().setTagArg("t", 0, sdnBadge);
+    getDisplayString().setTagArg("t", 1, "t");
+
+    // 2. Draw Clean, Compact Live Status Banner at Top
     std::stringstream banner;
-    banner << "SDN: 4 RSUs | 2 Fogs | PDR: " << std::fixed << std::setprecision(1) << pdr << "%";
-    if (untrustedLinksBypassed > 0) {
-        banner << " | Bypassed: " << untrustedLinksBypassed;
+    banner << "SDN Controller: 4 RSUs | 2 Fogs | Safety PDR: " << std::fixed << std::setprecision(1) << pdr << "%"
+           << " | Routed: " << totalPacketsRouted;
+    if (detoursActivated > 0) {
+        banner << " | Detours Active: " << detoursActivated;
     }
 
     cTextFigure* bannerText = new cTextFigure("sdn_status_banner");
     bannerText->setPosition(cFigure::Point(posX, 2.0));
     bannerText->setText(banner.str().c_str());
-    bannerText->setColor(cFigure::Color("midnightblue"));
-    bannerText->setFont(cFigure::Font("", 7, cFigure::FONT_BOLD));
+    bannerText->setColor(cFigure::Color(detoursActivated > 0 ? "darkorange" : "midnightblue"));
+    bannerText->setFont(cFigure::Font("", 8, cFigure::FONT_BOLD));
     bannerText->setAnchor(cFigure::ANCHOR_CENTER);
     bannerText->setHalo(true);
     group->addFigure(bannerText);
@@ -597,6 +648,19 @@ void EdgeTrustSDNController::finish()
     recordScalar("sdn_flowRulesInstalled", flowRulesInstalled);
     recordScalar("sdn_untrustedLinksBypassed", untrustedLinksBypassed);
     recordScalar("sdn_avgLatencyMs", avgLatency);
+
+    if (sdnTickTimerMsg) {
+        cancelAndDelete(sdnTickTimerMsg);
+        sdnTickTimerMsg = nullptr;
+    }
+    if (failLinkTimerMsg) {
+        cancelAndDelete(failLinkTimerMsg);
+        failLinkTimerMsg = nullptr;
+    }
+    if (failNodeTimerMsg) {
+        cancelAndDelete(failNodeTimerMsg);
+        failNodeTimerMsg = nullptr;
+    }
 }
 
 } // namespace veins

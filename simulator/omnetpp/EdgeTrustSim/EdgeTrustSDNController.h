@@ -143,8 +143,17 @@ class VEINS_API EdgeTrustSDNController : public omnetpp::cSimpleModule {
     double posY = 5.0;
     double posZ = 15.0;
 
+    // Fault Injection Parameters
+    double failLinkTime = -1.0;
+    int failLinkSrc = -1;
+    int failLinkDst = -1;
+    double failNodeTime = -1.0;
+    int failNodeId = -1;
+
     // Timers
     omnetpp::cMessage* sdnTickTimerMsg = nullptr;
+    omnetpp::cMessage* failLinkTimerMsg = nullptr;
+    omnetpp::cMessage* failNodeTimerMsg = nullptr;
 
     // Global State
     std::map<std::pair<int, int>, SDNLink> linkTopology;

@@ -16,4 +16,9 @@ simple EdgeTrustSDNController
         double posX = default(118);
         double posY = default(5);
         double posZ = default(15);
+        double failLinkTime @unit(s) = default(-1s);
+        int failLinkSrc = default(-1);
+        int failLinkDst = default(-1);
+        double failNodeTime @unit(s) = default(-1s);
+        int failNodeId = default(-1);
 }

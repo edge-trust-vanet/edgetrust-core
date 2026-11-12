@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+    <copy file="network.net.xml" />
+    <copy file="scenario_rush_hour.rou.xml" />
+    <copy file="rsu.add.xml" />
+    <copy file="viewsettings.xml" />
+    <copy file="scenario_rush_hour.sumocfg" type="config" />
+</launch>

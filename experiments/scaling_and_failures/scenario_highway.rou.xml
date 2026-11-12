@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <!-- Real-World Scenario: High-Speed Arterial Corridor (100-120 km/h, rapid RSU traversal) -->
+    <vType id="highway_car" accel="3.5" decel="5.0" length="4.8" maxSpeed="33.33"/>
+
+    <!-- Fast cross-corridor throughput -->
+    <flow id="f_w_e" type="highway_car" begin="0.00" end="3600.00" period="3.00" from="-E11" to="E21" departSpeed="max"/>
+    <flow id="f_e_w" type="highway_car" begin="0.00" end="3600.00" period="3.00" from="-E21" to="E11" departSpeed="max"/>
+    <flow id="f_g1_ns" type="highway_car" begin="0.00" end="3600.00" period="4.00" from="-E12" to="E13" departSpeed="max"/>
+    <flow id="f_g1_sn" type="highway_car" begin="0.00" end="3600.00" period="4.00" from="-E13" to="E12" departSpeed="max"/>
+    <flow id="f_g2_ns" type="highway_car" begin="0.00" end="3600.00" period="4.00" from="-E22" to="E23" departSpeed="max"/>
+    <flow id="f_g2_sn" type="highway_car" begin="0.00" end="3600.00" period="4.00" from="-E23" to="E22" departSpeed="max"/>
+</routes>
