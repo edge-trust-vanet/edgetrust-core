@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- EdgeTrust City RSUs -->
+    <poi id="rsu_0_campus" type="RSU" color="255,215,0" layer="5" x="646858.0" y="5493243.0" width="12.0" height="12.0"/>
+    <poi id="rsu_1_techpark" type="RSU" color="255,215,0" layer="5" x="646879.0" y="5492682.0" width="12.0" height="12.0"/>
+    <poi id="rsu_2_downtown" type="RSU" color="255,215,0" layer="5" x="645787.0" y="5493450.0" width="12.0" height="12.0"/>
+    <poi id="rsu_3_station" type="RSU" color="255,215,0" layer="5" x="646041.0" y="5494118.0" width="12.0" height="12.0"/>
+    <poi id="rsu_4_westgate" type="RSU" color="255,215,0" layer="5" x="644644.0" y="5493391.0" width="12.0" height="12.0"/>
+    <poi id="rsu_5_southwest" type="RSU" color="255,215,0" layer="5" x="644737.0" y="5492781.0" width="12.0" height="12.0"/>
+</additional>

@@ -1336,9 +1336,14 @@ void EdgeTrustRSUApp::sendSDNTransitPacket()
     if (!parent) return;
 
     totalSDNPacketsOriginated++;
-    // RSUs 0 and 1 (Grid 1) route transit safety alerts to RSUs 2 and 3 (Grid 2).
-    // RSUs 2 and 3 (Grid 2) route transit safety alerts to RSUs 0 and 1 (Grid 1).
-    int targetRsu = (rsuId < 2) ? (2 + (sdnPacketSequence % 2)) : (0 + (sdnPacketSequence % 2));
+    int totalRsus = 4;
+    if (parent->hasSubmodule("rsu")) {
+        totalRsus = parent->getSubmoduleVectorSize("rsu");
+    }
+    int targetRsu = defaultPeerRsuId;
+    if (totalRsus > 1) {
+        targetRsu = (rsuId + 1 + (sdnPacketSequence % (totalRsus - 1))) % totalRsus;
+    }
 
     EdgeTrustSDNPacket* sdnPkt = new EdgeTrustSDNPacket("SDN_SAFETY_TRANSIT");
     sdnPkt->setSourceRsuId(rsuId);

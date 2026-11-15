@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- Highway Central Green Divider / Median -->
+    <poly id="median_w" color="34,139,34" fill="true" layer="-1" shape="0.0,99.0 1000.0,99.0 1000.0,101.0 0.0,101.0"/>
+    <poly id="median_e" color="34,139,34" fill="true" layer="-1" shape="1000.0,99.0 2000.0,99.0 2000.0,101.0 1000.0,101.0"/>
+
+    <!-- North Grass Verge -->
+    <poly id="verge_north" color="46,139,87" fill="true" layer="-2" shape="0.0,125.0 2000.0,125.0 2000.0,250.0 0.0,250.0"/>
+
+    <!-- South Grass Verge & Landscape -->
+    <poly id="verge_south" color="46,139,87" fill="true" layer="-2" shape="0.0,-50.0 2000.0,-50.0 2000.0,75.0 0.0,75.0"/>
+
+    <!-- Highway Sound Barrier Wall -->
+    <poly id="sound_barrier" color="112,128,144" fill="true" layer="0" shape="0.0,124.0 2000.0,124.0 2000.0,125.0 0.0,125.0"/>
+
+    <!-- Overpass Bridge Deck Visual -->
+    <poly id="bridge_deck" color="105,105,105" fill="true" layer="1" shape="990.0,70.0 1010.0,70.0 1010.0,130.0 990.0,130.0"/>
+</additional>

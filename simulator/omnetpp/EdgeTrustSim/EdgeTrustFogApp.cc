@@ -787,6 +787,12 @@ bool EdgeTrustFogApp::loadCheckpoint(const std::string& filepath)
 Coord EdgeTrustFogApp::getModuleVisualPos(cModule* mod, const Coord& fallbackPos)
 {
     if (mod) {
+        if (mod->findSubmodule("mobility") != -1) {
+            cModule* mob = mod->getSubmodule("mobility");
+            if (mob && mob->hasPar("x") && mob->hasPar("y")) {
+                return Coord(mob->par("x").doubleValue(), mob->par("y").doubleValue(), 0.0);
+            }
+        }
         const char* pTag = mod->getDisplayString().getTagArg("p", 0);
         const char* yTag = mod->getDisplayString().getTagArg("p", 1);
         if (pTag && yTag && pTag[0] != '\0' && yTag[0] != '\0') {
@@ -829,18 +835,23 @@ void EdgeTrustFogApp::updateFogCanvasVisual(const std::string& type, const std::
         line->setLineStyle(type == "revocation" ? cFigure::LINE_SOLID : cFigure::LINE_DASHED);
     }
 
-    // If Fog 0, draw Inter-Fog trunk link between Fog 0 and Fog 1
-    if (fogId == 0 && enableInterFog) {
-        cModule* fog1Mod = parent->getSubmodule("fog", 1);
-        if (fog1Mod) {
-            Coord pFog1 = Coord(178.0, 15.0, 0.0);
-            cLineFigure* trunk = dynamic_cast<cLineFigure*>(root->getFigure("fog_trunk_line"));
+    // Draw Inter-Fog trunk link between peer Fog nodes
+    if (enableInterFog && peerFogId > fogId) {
+        cModule* peerMod = parent->getSubmodule("fog", peerFogId);
+        if (peerMod) {
+            Coord pPeer = Coord(pFog.x + 100.0, pFog.y, 0.0);
+            if (peerMod->hasPar("posX") && peerMod->hasPar("posY")) {
+                pPeer.x = peerMod->par("posX").doubleValue();
+                pPeer.y = peerMod->par("posY").doubleValue();
+            }
+            std::string trunkName = "fog_trunk_" + std::to_string(fogId) + "_" + std::to_string(peerFogId);
+            cLineFigure* trunk = dynamic_cast<cLineFigure*>(root->getFigure(trunkName.c_str()));
             if (!trunk) {
-                trunk = new cLineFigure("fog_trunk_line");
+                trunk = new cLineFigure(trunkName.c_str());
                 root->addFigure(trunk);
             }
             trunk->setStart(cFigure::Point(pFog.x, pFog.y));
-            trunk->setEnd(cFigure::Point(pFog1.x, pFog1.y));
+            trunk->setEnd(cFigure::Point(pPeer.x, pPeer.y));
             trunk->setLineColor(cFigure::Color("mediumpurple"));
             trunk->setLineWidth(2.0);
             trunk->setLineStyle(cFigure::LINE_SOLID);

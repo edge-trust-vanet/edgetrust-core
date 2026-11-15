@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <!-- Vehicle Types -->
+    <vType id="highway_car" accel="2.8" decel="4.5" length="4.6" maxSpeed="36.11" color="0,191,255" guiShape="passenger/sedan"/>
+    <vType id="highway_suv" accel="2.5" decel="4.5" length="4.9" maxSpeed="33.33" color="255,140,0" guiShape="passenger/wagon"/>
+    <vType id="highway_truck" accel="1.2" decel="3.5" length="13.5" maxSpeed="25.00" color="192,192,192" guiShape="truck/semitrailer"/>
+    <vType id="highway_emergency" accel="3.5" decel="5.0" length="5.2" maxSpeed="41.67" color="255,0,0" guiShape="emergency"/>
+
+    <!-- Route Definitions -->
+    <route id="r_eb_main" edges="hwy_eb_1 hwy_eb_2 hwy_eb_3 hwy_eb_4"/>
+    <route id="r_wb_main" edges="hwy_wb_4 hwy_wb_3 hwy_wb_2 hwy_wb_1"/>
+    <route id="r_on_ramp" edges="ramp_on hwy_eb_2 hwy_eb_3 hwy_eb_4"/>
+    <route id="r_off_ramp" edges="hwy_eb_1 hwy_eb_2 hwy_eb_3 ramp_off"/>
+    <route id="r_overpass_sn" edges="art_sn_1 art_sn_bridge art_sn_2"/>
+    <route id="r_overpass_ns" edges="art_ns_1 art_ns_bridge art_ns_2"/>
+
+    <!-- Traffic Flows -->
+    <flow id="flow_eb_car" type="highway_car" route="r_eb_main" begin="0" end="3600" period="2.0" departSpeed="max"/>
+    <flow id="flow_eb_suv" type="highway_suv" route="r_eb_main" begin="0" end="3600" period="3.5" departSpeed="max"/>
+    <flow id="flow_eb_truck" type="highway_truck" route="r_eb_main" begin="0" end="3600" period="6.0" departSpeed="max"/>
+
+    <flow id="flow_wb_car" type="highway_car" route="r_wb_main" begin="0" end="3600" period="2.0" departSpeed="max"/>
+    <flow id="flow_wb_suv" type="highway_suv" route="r_wb_main" begin="0" end="3600" period="3.5" departSpeed="max"/>
+    <flow id="flow_wb_truck" type="highway_truck" route="r_wb_main" begin="0" end="3600" period="6.0" departSpeed="max"/>
+
+    <flow id="flow_on_ramp" type="highway_car" route="r_on_ramp" begin="0" end="3600" period="4.0" departSpeed="max"/>
+    <flow id="flow_off_ramp" type="highway_suv" route="r_off_ramp" begin="0" end="3600" period="5.0" departSpeed="max"/>
+
+    <flow id="flow_art_sn" type="highway_car" route="r_overpass_sn" begin="0" end="3600" period="5.0" departSpeed="max"/>
+    <flow id="flow_art_ns" type="highway_car" route="r_overpass_ns" begin="0" end="3600" period="5.0" departSpeed="max"/>
+</routes>

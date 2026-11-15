@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<types xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/types_file.xsd">
+    <type id="highway.mainline" priority="9" numLanes="3" speed="33.33" width="3.75" allow="passenger delivery truck bus motorcycle emergency"/>
+    <type id="highway.ramp" priority="7" numLanes="1" speed="22.22" width="3.5" allow="passenger delivery truck bus motorcycle emergency"/>
+    <type id="arterial" priority="5" numLanes="2" speed="16.67" width="3.25" allow="passenger delivery truck bus motorcycle emergency"/>
+</types>

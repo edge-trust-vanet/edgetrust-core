@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edges xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/edges_file.xsd">
+    <!-- Eastbound Mainline (3 lanes, 120 km/h) -->
+    <edge id="hwy_eb_1" from="node_w" to="node_ramp_merge" type="highway.mainline" spreadType="right"/>
+    <edge id="hwy_eb_2" from="node_ramp_merge" to="node_mid" type="highway.mainline" spreadType="right"/>
+    <edge id="hwy_eb_3" from="node_mid" to="node_ramp_split" type="highway.mainline" spreadType="right"/>
+    <edge id="hwy_eb_4" from="node_ramp_split" to="node_e" type="highway.mainline" spreadType="right"/>
+
+    <!-- Westbound Mainline (3 lanes, 120 km/h) -->
+    <edge id="hwy_wb_4" from="node_e" to="node_ramp_split" type="highway.mainline" spreadType="right"/>
+    <edge id="hwy_wb_3" from="node_ramp_split" to="node_mid" type="highway.mainline" spreadType="right"/>
+    <edge id="hwy_wb_2" from="node_mid" to="node_ramp_merge" type="highway.mainline" spreadType="right"/>
+    <edge id="hwy_wb_1" from="node_ramp_merge" to="node_w" type="highway.mainline" spreadType="right"/>
+
+    <!-- On-Ramp: merges into Eastbound corridor -->
+    <edge id="ramp_on" from="node_ramp_in" to="node_ramp_merge" type="highway.ramp" shape="100.0,20.0 300.0,30.0 450.0,75.0 500.0,95.0"/>
+
+    <!-- Off-Ramp: diverges from Eastbound corridor -->
+    <edge id="ramp_off" from="node_ramp_split" to="node_ramp_out" type="highway.ramp" shape="1500.0,95.0 1550.0,75.0 1700.0,30.0 1900.0,20.0"/>
+
+    <!-- Arterial Overpass Corridor (North-South) -->
+    <edge id="art_sn_1" from="node_overpass_s" to="node_bridge_s" type="arterial"/>
+    <edge id="art_sn_bridge" from="node_bridge_s" to="node_bridge_n" type="arterial"/>
+    <edge id="art_sn_2" from="node_bridge_n" to="node_overpass_n" type="arterial"/>
+
+    <edge id="art_ns_1" from="node_overpass_n" to="node_bridge_n" type="arterial"/>
+    <edge id="art_ns_bridge" from="node_bridge_n" to="node_bridge_s" type="arterial"/>
+    <edge id="art_ns_2" from="node_bridge_s" to="node_overpass_s" type="arterial"/>
+
+    <!-- Interchange Ramp Connectors -->
+    <edge id="ramp_hwy_to_art" from="node_mid" to="node_bridge_n" type="highway.ramp" shape="1000.0,100.0 1020.0,115.0 1000.0,130.0"/>
+    <edge id="ramp_art_to_hwy" from="node_bridge_s" to="node_mid" type="highway.ramp" shape="1000.0,70.0 980.0,85.0 1000.0,100.0"/>
+</edges>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<viewsettings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/viewsettings_file.xsd">
+    <scheme name="highway_realism">
+        <opengl antialiase="true" dither="true"/>
+        <background backgroundColor="46,139,87" showGrid="false"/>
+        <edges laneEdgeMode="0" laneShowBorders="true" showLinkDecals="true" showRails="false" edgeName_show="false"/>
+        <vehicles vehicleMode="3" vehicleQuality="2" vehicle_size="1.5" showBlinker="true"/>
+        <junctions drawShape="true" drawCrossingsAndWalkingAreas="true"/>
+        <polygons showPolygons="true"/>
+    </scheme>
+    <viewport zoom="250" x="1000" y="100"/>
+</viewsettings>

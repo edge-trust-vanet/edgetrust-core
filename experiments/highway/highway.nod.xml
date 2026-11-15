@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+    <!-- Highway Mainline West to East -->
+    <node id="node_w" x="0.0" y="100.0" type="priority"/>
+    <node id="node_ramp_merge" x="500.0" y="100.0" type="priority"/>
+    <node id="node_mid" x="1000.0" y="100.0" type="priority"/>
+    <node id="node_ramp_split" x="1500.0" y="100.0" type="priority"/>
+    <node id="node_e" x="2000.0" y="100.0" type="priority"/>
+
+    <!-- Highway On-Ramp Origin -->
+    <node id="node_ramp_in" x="100.0" y="20.0" type="priority"/>
+
+    <!-- Highway Off-Ramp Destination -->
+    <node id="node_ramp_out" x="1900.0" y="20.0" type="priority"/>
+
+    <!-- Overpass Arterial (North-South Crossing) -->
+    <node id="node_overpass_s" x="1000.0" y="-50.0" type="priority"/>
+    <node id="node_overpass_n" x="1000.0" y="250.0" type="priority"/>
+    <node id="node_bridge_s" x="1000.0" y="70.0" type="priority"/>
+    <node id="node_bridge_n" x="1000.0" y="130.0" type="priority"/>
+</nodes>

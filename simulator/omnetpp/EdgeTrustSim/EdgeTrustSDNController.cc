@@ -80,7 +80,13 @@ void EdgeTrustSDNController::initialize(int stage)
                             rsuPos.z = mob->hasPar("z") ? mob->par("z").doubleValue() : 3.0;
                         }
                     }
-                    int assignedFog = (i < 2) ? 0 : 1;
+                    int assignedFog = 0;
+                    cModule* appl = rsuMod->getSubmodule("appl");
+                    if (appl && appl->hasPar("fogId")) {
+                        assignedFog = appl->par("fogId").intValue();
+                    } else if (numFogs > 0) {
+                        assignedFog = std::min(numFogs - 1, i / (std::max(1, numRSUs / numFogs)));
+                    }
                     registerRSU(i, rsuPos, assignedFog);
                 }
             }
@@ -88,11 +94,31 @@ void EdgeTrustSDNController::initialize(int stage)
             for (int f = 0; f < numFogs; ++f) {
                 cModule* fogMod = parent->getSubmodule("fog", f);
                 if (fogMod) {
-                    Coord fogPos(f == 0 ? 58.0 : 178.0, 15.0, 10.0);
+                    Coord fogPos(50.0 + f * 100.0, 15.0, 10.0);
+                    if (fogMod->hasPar("posX") && fogMod->hasPar("posY")) {
+                        fogPos.x = fogMod->par("posX").doubleValue();
+                        fogPos.y = fogMod->par("posY").doubleValue();
+                        fogPos.z = fogMod->hasPar("posZ") ? fogMod->par("posZ").doubleValue() : 10.0;
+                    }
+                    int offset = fogMod->hasPar("managedRsuOffset") ? fogMod->par("managedRsuOffset").intValue() : (f * (numRSUs / numFogs));
+                    int count = fogMod->hasPar("managedRsuCount") ? fogMod->par("managedRsuCount").intValue() : (numRSUs / numFogs);
                     std::vector<int> managed;
-                    if (f == 0) { managed.push_back(0); managed.push_back(1); }
-                    else { managed.push_back(2); managed.push_back(3); }
+                    for (int k = 0; k < count && (offset + k) < numRSUs; ++k) {
+                        managed.push_back(offset + k);
+                    }
                     registerFog(f, fogPos, managed);
+                }
+            }
+
+            // Recalculate physical distances between RSUs based on registered positions
+            for (auto& kv : linkTopology) {
+                int u = kv.first.first;
+                int v = kv.first.second;
+                if (rsuNodes.find(u) != rsuNodes.end() && rsuNodes.find(v) != rsuNodes.end()) {
+                    double d = rsuNodes[u].pos.distance(rsuNodes[v].pos);
+                    if (d > 10.0) {
+                        kv.second.distance = d;
+                    }
                 }
             }
         }
@@ -105,10 +131,6 @@ void EdgeTrustSDNController::initialize(int stage)
 
 void EdgeTrustSDNController::initializeDefaultTopology()
 {
-    // Define 4-RSU grid topology:
-    // Cluster 0 (Grid 1): RSU 0 (58, 49) [South], RSU 1 (58, 98) [North]
-    // Cluster 1 (Grid 2): RSU 2 (178, 49) [South], RSU 3 (178, 98) [North]
-
     auto addBidirectionalLink = [this](int u, int v, double dist) {
         SDNLink l1;
         l1.fromRsu = u;
@@ -128,17 +150,29 @@ void EdgeTrustSDNController::initializeDefaultTopology()
         linkTopology[{v, u}] = l2;
     };
 
-    // Intra-Cluster Links (vertical corridors)
-    addBidirectionalLink(0, 1, 49.0);
-    addBidirectionalLink(2, 3, 49.0);
-
-    // Inter-Cluster Links (horizontal cross-grid corridors)
-    addBidirectionalLink(0, 2, 120.0); // South corridor (primary)
-    addBidirectionalLink(1, 3, 120.0); // North corridor (alternate detour)
-
-    // Diagonal Cross-Links (backhaul mesh redundancy)
-    addBidirectionalLink(0, 3, 130.0);
-    addBidirectionalLink(1, 2, 130.0);
+    if (numRSUs <= 4) {
+        // Standard 4-RSU grid
+        addBidirectionalLink(0, 1, 49.0);
+        addBidirectionalLink(2, 3, 49.0);
+        addBidirectionalLink(0, 2, 120.0);
+        addBidirectionalLink(1, 3, 120.0);
+        addBidirectionalLink(0, 3, 130.0);
+        addBidirectionalLink(1, 2, 130.0);
+    } else {
+        // Scaled Multi-District City Topology (e.g. 6 RSUs across 3 districts)
+        for (int i = 0; i < numRSUs; i += 2) {
+            if (i + 1 < numRSUs) {
+                addBidirectionalLink(i, i + 1, 100.0);
+            }
+        }
+        for (int i = 0; i < numRSUs; ++i) {
+            for (int j = i + 1; j < numRSUs; ++j) {
+                if (linkTopology.find({i, j}) == linkTopology.end()) {
+                    addBidirectionalLink(i, j, 200.0 + (std::abs(i - j) * 50.0));
+                }
+            }
+        }
+    }
 
     // Initialize node profiles
     for (int i = 0; i < numRSUs; ++i) {
@@ -146,7 +180,7 @@ void EdgeTrustSDNController::initializeDefaultTopology()
         node.rsuId = i;
         node.pos = Coord((i < 2 ? 58.0 : 178.0), ((i % 2 == 0) ? 49.0 : 98.0), 3.0);
         node.isQuarantined = false;
-        node.assignedFogId = (i < 2) ? 0 : 1;
+        node.assignedFogId = (numFogs > 0) ? (i / (std::max(1, numRSUs / numFogs))) : 0;
         node.averageTrust = 1.0;
         rsuNodes[i] = node;
     }
@@ -601,7 +635,7 @@ void EdgeTrustSDNController::updateSDNCanvasVisual()
 
     // 2. Draw Clean, Compact Live Status Banner at Top
     std::stringstream banner;
-    banner << "SDN Controller: 4 RSUs | 2 Fogs | Safety PDR: " << std::fixed << std::setprecision(1) << pdr << "%"
+    banner << "SDN Controller: " << numRSUs << " RSUs | " << numFogs << " Fogs | Safety PDR: " << std::fixed << std::setprecision(1) << pdr << "%"
            << " | Routed: " << totalPacketsRouted;
     if (detoursActivated > 0) {
         banner << " | Detours Active: " << detoursActivated;

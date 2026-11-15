@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    <!-- EdgeTrust Highway RSUs along corridor -->
+    <poi id="rsu_0_poi" type="RSU" color="255,215,0" layer="3" x="300.0" y="115.0" width="8.0" height="8.0"/>
+    <poi id="rsu_1_poi" type="RSU" color="255,215,0" layer="3" x="800.0" y="115.0" width="8.0" height="8.0"/>
+    <poi id="rsu_2_poi" type="RSU" color="255,215,0" layer="3" x="1300.0" y="115.0" width="8.0" height="8.0"/>
+    <poi id="rsu_3_poi" type="RSU" color="255,215,0" layer="3" x="1800.0" y="115.0" width="8.0" height="8.0"/>
+</additional>

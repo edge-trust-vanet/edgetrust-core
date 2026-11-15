@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+    <copy file="erlangen.net.xml" />
+    <copy file="erlangen_city.rou.xml" />
+    <copy file="erlangen.poly.xml" />
+    <copy file="erlangen_city.add.xml" />
+    <copy file="erlangen_city.sumo.cfg" type="config" />
+</launch>
