@@ -334,13 +334,27 @@ If you use EdgeTrust-VANET in your research, please cite our work:
 
 ---
 
-## Research Team and Supervision
+## Project Contributors and Research Team
 
-Developed by **Team 43** under the guidance of **Dr. Neethu M R** at **Amrita Vishwa Vidyapeetham, Amrita School of Computing, Coimbatore, India**:
+EdgeTrust-VANET is developed by **Team 43** under the academic supervision of **Dr. Neethu M R** at **Amrita Vishwa Vidyapeetham, Amrita School of Computing, Coimbatore, India**.
 
-- **Dr. Neethu M R** - *Project Supervisor & Assistant Professor, Department of Computer Science and Engineering* (`mr_neethu@cb.amrita.edu`)
-- **Madisetty Mounik Sai** - *Undergraduate Researcher* (`cb.sc.u4cse23561@cb.students.amrita.edu`)
-- **Edavalapati Aashiq** - *Undergraduate Researcher* (`cb.sc.u4cse23560@cb.students.amrita.edu`)
-- **Chitturi Vivek Vardhan** - *Undergraduate Researcher* (`cb.sc.u4cse23360@cb.students.amrita.edu`)
-- **Nishanth K** - *Undergraduate Researcher* (`cb.sc.u4cse23523@cb.students.amrita.edu`)
-- **Juturu Naga Abhinava Sai** - *Undergraduate Researcher* (`cb.sc.u4cse23563@cb.students.amrita.edu`)
+All contributors across the core simulation engine and its nested submodules ([`edgetrust-ml`](https://github.com/edge-trust-vanet/edgetrust-ml) and [`edgetrust-web`](https://github.com/edge-trust-vanet/edgetrust-web)) are recognized below:
+
+| Contributor | GitHub Profile | Primary Focus & Subsystem Ownership |
+| :--- | :--- | :--- |
+| **Edavalapati Aashiq** | [@Aashiq-Edavalapati](https://github.com/Aashiq-Edavalapati) | **Core Systems Architect:** OMNeT++ / Veins simulation engine, SDN adaptive forwarding controller, multi-district Fog consensus, visual Highway & Erlangen City deployments. |
+| **Madisetty Mounik Sai** | [@mouniksai](https://github.com/mouniksai) | **Machine Learning Lead:** 14-feature observable vector pipeline, 17-model benchmark suite, data leakage verification audit, native C++ model exporter, and real-time Flask dashboard. |
+| **Nishanth K** | [@NISHANTH-KONCHADA](https://github.com/NISHANTH-KONCHADA) | **Web Platform & Visualization Lead:** React 18 / Tailwind web portal, 60 FPS microscopic mobility canvas (`VanetCanvas.tsx`), LaTeX publication sources, and technical devlogs. |
+| **Chitturi Vivek Vardhan** | [@thecodingvivek](https://github.com/thecodingvivek) | **Trust Engine & Sensitivity Optimization:** Exponential Moving Average ($\alpha = 0.70$) sensitivity sweeps, model inference speed vs. memory trade-off profiling, and trust decay calibration. |
+| **Juturu Naga Abhinava Sai** | [@abhinav-juturu](https://github.com/abhinav-juturu) | **Telemetry & Edge Profiling:** Vehicular network latency and jitter profiling, edge RSU memory footprint analysis, decentralized trust taxonomy, and systematic survey synthesis. |
+
+> [!NOTE]
+> Canonical contributor identities and legacy Git alias deduplication (e.g. mapping `NISHANTH-KONCHADA` and `nishanth k` to `Nishanth K`) are managed via [`.mailmap`](.mailmap). For detailed attribution, see [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
+### Project Supervision
+
+- **Dr. Neethu M R**  
+  *Project Supervisor & Assistant Professor*  
+  Department of Computer Science and Engineering  
+  Amrita School of Computing, Amrita Vishwa Vidyapeetham, Coimbatore, India  
+  Email: `mr_neethu@cb.amrita.edu`
