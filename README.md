@@ -59,6 +59,23 @@ If you already cloned without the `--recurse-submodules` flag, initialize and fe
 git submodule update --init --recursive
 ```
 
+### Submodule Breakdown & Responsibilities
+
+#### 1. [`edgetrust-ml`](https://github.com/edge-trust-vanet/edgetrust-ml) — Machine Learning & Edge Intelligence Engine
+`edgetrust-ml` provides the statistical intelligence, data engineering, and embedded prediction runtime for the EdgeTrust-VANET framework:
+- **Leakage-Free 14-Feature Observable Pipeline:** Restricts model inputs strictly to physical metrics observable in real time by a Roadside Unit (RSU)—spanning 5 kinematics, 6 radio/network telemetry metrics, and 3 dynamic reputation scores. It deliberately bans retrospective post-hoc attack counters to prevent artificial 100% test scores and guarantee genuine generalization on unseen vehicles.
+- **Unified 23,970-Record Research Dataset:** Harmonizes official VeReMi Luxembourg (LuST) simulation traces (72.88%), EdgeTrust physical telemetry (20.86%), and V-RADD routing logs (6.26%) partitioned strictly by Vehicle ID via Stratified GroupKFold (zero data leakage).
+- **17-Model Benchmark Suite:** Rigorously evaluates tree ensembles, GBDTs (LightGBM, CatBoost, XGBoost), neural networks, and linear baselines across 3,539 holdout test trajectories.
+- **Native C++ Code Exporter:** Serializes trained scikit-learn and LightGBM models into header-only, zero-dependency C++ predictor classes (`LogisticRegressionPredictor.h`, `RandomForestPredictor.h`, `LightGBMPredictor.h`) used directly by `EdgeTrustRSUApp.cc` for sub-microsecond edge inference ($0.38\,\mu\text{s}$ LR, $5.0\,\mu\text{s}$ CART, $329\,\mu\text{s}$ LightGBM).
+- **Interactive Flask Edge Dashboard:** A real-time edge simulator with dynamic 14-feature input sliders, attack scenario presets (Sybil, DoS, Feigned Braking, GPS Spoofing), and live classification decision gauges.
+
+#### 2. [`edgetrust-web`](https://github.com/edge-trust-vanet/edgetrust-web) — Interactive Web Showcase & Architecture Visualizer
+`edgetrust-web` is the visual presentation platform and documentation hub for the project:
+- **60 FPS Microscopic Vehicular Canvas (`VanetCanvas.tsx`):** Simulates multi-lane arterial traffic, 10 Hz DSRC beacon broadcasts, RSU sensing fields, and dynamic node trust-state transitions (Green = Trusted, Amber = Suspect, Red = Quarantined).
+- **Four-Tier Architecture Explorer:** Visual walkthrough detailing the OBU Kinematic Firewall, RSU Edge Engine, Regional Fog Ledger, and Central SDN Controller.
+- **285-Paper Literature Survey Reader:** Interactive synthesis of peer-reviewed publications across IEEE 1609.2 PKI limitations, trust models, and edge ML.
+- **Modern React 18 & Vite Stack:** Styled with Tailwind CSS, TypeScript, and Lucide React icons, deployed on Firebase Hosting.
+
 ---
 
 ## System Architecture
