@@ -1,0 +1,6 @@
+[submodule "edgetrust-ml"]
+	path = edgetrust-ml
+	url = https://github.com/edge-trust-vanet/edgetrust-ml.git
+[submodule "edgetrust-web"]
+	path = edgetrust-web
+	url = https://github.com/edge-trust-vanet/edgetrust-web.git
